@@ -1,0 +1,1443 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cube Coach</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&family=Rajdhani:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* Direction: dark holo-console. Cyan primary, magenta for the active move, mono readouts. Single column, phone first. */
+:root{
+  --bg:#05070d; --panel:#0b1220; --line:#1b2c45; --ink:#e6f1ff; --mute:#7f93b2;
+  --cyan:#35e0ff; --mag:#ff3df0; --ok:#3dffa0; --warn:#ffb340;
+  --disp:'Orbitron','Rajdhani','Segoe UI',system-ui,sans-serif; --body:'Rajdhani','Segoe UI',system-ui,sans-serif; --mono:ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.45;-webkit-text-size-adjust:100%}
+body{background:radial-gradient(1200px 600px at 50% -10%,#10213f 0,transparent 60%),var(--bg);min-height:100%}
+.app{max-width:760px;margin:0 auto;padding:16px;display:flex;flex-direction:column;gap:14px}
+h1,h2,h3{font-family:var(--disp);margin:0;letter-spacing:.06em;text-wrap:balance}
+h1{font-size:20px;color:var(--cyan);text-shadow:0 0 14px #35e0ff88}
+h2{font-size:13px;color:var(--cyan);text-transform:uppercase}
+p{margin:0}
+.sub{color:var(--mute);font-size:14px}
+header{display:flex;flex-direction:column;gap:2px}
+
+.card{background:linear-gradient(180deg,#0d1627,#0a101c);border:1px solid var(--line);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:10px;position:relative}
+.card::before,.card::after{content:"";position:absolute;width:12px;height:12px;border:2px solid var(--cyan);opacity:.7}
+.card::before{top:-1px;left:-1px;border-right:0;border-bottom:0;border-radius:10px 0 0 0}
+.card::after{bottom:-1px;right:-1px;border-left:0;border-top:0;border-radius:0 0 10px 0}
+
+/* stage */
+.viewer{padding:0;overflow:hidden}
+.stage{position:relative;height:min(86vw,400px);perspective:1100px;touch-action:none;cursor:grab;overflow:hidden;user-select:none;-webkit-user-select:none}
+.stage:active{cursor:grabbing}
+.floor{position:absolute;left:50%;bottom:-8%;width:160%;height:70%;transform:translateX(-50%) rotateX(72deg);transform-origin:50% 100%;
+  background-image:linear-gradient(#35e0ff33 1px,transparent 1px),linear-gradient(90deg,#35e0ff33 1px,transparent 1px);background-size:36px 36px;
+  -webkit-mask-image:radial-gradient(closest-side,#000 30%,transparent 100%);mask-image:radial-gradient(closest-side,#000 30%,transparent 100%);animation:slide 6s linear infinite}
+@keyframes slide{to{background-position:0 36px}}
+.ring{position:absolute;left:50%;top:50%;border-radius:50%;border:1px dashed #35e0ff55;transform:translate(-50%,-50%);pointer-events:none}
+.r1{width:78%;aspect-ratio:1;animation:spin 40s linear infinite}
+.r2{width:60%;aspect-ratio:1;border-color:#ff3df044;animation:spin 26s linear infinite reverse}
+@keyframes spin{to{transform:translate(-50%,-50%) rotate(360deg)}}
+.world{position:absolute;left:50%;top:50%;width:0;height:0;transform-style:preserve-3d}
+.cubie{position:absolute;left:0;top:0;width:0;height:0;transform-style:preserve-3d}
+.face{position:absolute;backface-visibility:hidden;background:#06090f;display:grid;place-items:center}
+.stk{width:86%;height:86%;border-radius:14%;background:var(--c);box-shadow:0 0 10px var(--c),inset 0 0 8px #ffffff55;transition:opacity .25s,filter .25s}
+.stk.dim{opacity:.22;filter:saturate(.3)}
+.stk.hl{animation:pulse 1.1s ease-in-out infinite}
+.stk.turn{filter:brightness(1.35);box-shadow:0 0 18px var(--c),0 0 4px #fff,inset 0 0 8px #fff}
+@keyframes pulse{50%{filter:brightness(1.5);box-shadow:0 0 20px var(--c),0 0 6px #fff}}
+.hud{position:absolute;left:12px;top:10px;font-family:var(--mono);font-size:11px;color:var(--cyan);letter-spacing:.08em;text-transform:uppercase;pointer-events:none;line-height:1.5}
+.hud b{color:var(--ink);font-weight:600}
+.badge{position:absolute;right:14px;top:8px;font-family:var(--disp);font-size:44px;line-height:1;color:var(--mag);text-shadow:0 0 18px #ff3df0;min-width:60px;text-align:right;pointer-events:none}
+.hint{position:absolute;left:0;right:0;bottom:8px;text-align:center;font-size:12px;color:var(--mute);pointer-events:none}
+.bar{display:flex;gap:8px;align-items:center;padding:10px 14px;border-top:1px solid var(--line);flex-wrap:wrap}
+.bar .grow{flex:1;min-width:120px;display:flex;align-items:center;gap:8px;color:var(--mute);font-size:13px}
+.bar input[type=range]{flex:1;accent-color:var(--cyan);min-width:60px}
+
+button{font:inherit;color:var(--ink);background:#0f1b30;border:1px solid var(--line);border-radius:8px;padding:9px 12px;cursor:pointer;min-height:40px}
+button:hover{border-color:var(--cyan)}
+button:focus-visible,input:focus-visible{outline:2px solid var(--mag);outline-offset:2px}
+button.pri{background:linear-gradient(180deg,#14456a,#0e2f4c);border-color:var(--cyan);color:#fff;text-shadow:0 0 8px var(--cyan);font-weight:600}
+button:disabled{opacity:.45;cursor:default}
+.ctl{min-width:46px;font-size:17px}
+
+/* progress */
+.steps{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.chip{border:1px solid var(--line);border-radius:8px;padding:7px 6px;font-size:12px;text-align:center;color:var(--mute);background:#0a1120;display:flex;flex-direction:column;gap:2px;cursor:default}
+.chip b{font-family:var(--mono);font-size:11px;color:var(--mute)}
+.chip.done{border-color:#1d6b4a;color:var(--ok)}
+.chip.done b{color:var(--ok)}
+.chip.now{border-color:var(--mag);color:#fff;box-shadow:0 0 14px #ff3df055,inset 0 0 10px #ff3df022}
+.chip.now b{color:var(--mag)}
+
+/* coach */
+.coach h3{font-size:16px;color:#fff}
+.alg{font-family:var(--mono);font-size:15px;background:#06101c;border:1px solid var(--line);border-left:3px solid var(--mag);border-radius:6px;padding:8px 10px;overflow-x:auto;white-space:nowrap}
+.tip{font-size:14px;color:var(--mute)}
+.tip b{color:var(--warn)}
+.seglist{display:flex;flex-direction:column;gap:6px;max-height:300px;overflow-y:auto}
+.seg{border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:#09111e}
+.seg.cur{border-color:var(--mag);box-shadow:0 0 12px #ff3df044}
+.seg.done{opacity:.5}
+.seg .t{font-size:14px;font-weight:600}
+.seg .x{font-size:13px;color:var(--mute)}
+.mv{display:flex;flex-wrap:wrap;gap:3px;margin-top:5px}
+.mv i{font-style:normal;font-family:var(--mono);font-size:12px;padding:2px 5px;border-radius:4px;background:#0f1b30;border:1px solid var(--line)}
+.mv i.on{background:var(--mag);border-color:var(--mag);color:#000;font-weight:700}
+.mv i.past{opacity:.4}
+.ok{color:var(--ok)}
+
+/* painter */
+.net{display:grid;grid-template-columns:repeat(12,1fr);gap:2px;max-width:420px;width:100%;margin:0 auto}
+.net .c{aspect-ratio:1;border-radius:4px;border:1px solid #000a;padding:0;min-height:0;font-size:10px;color:#0009;font-family:var(--mono)}
+.net .e{aspect-ratio:1}
+.pal{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.sw{width:40px;height:40px;border-radius:50%;border:2px solid transparent;padding:0;position:relative}
+.sw.sel{border-color:#fff;box-shadow:0 0 12px #fff}
+.sw small{position:absolute;bottom:-14px;left:0;right:0;text-align:center;font-family:var(--mono);font-size:10px;color:var(--mute)}
+.sw small.bad{color:var(--warn)}
+.pal{padding-bottom:14px}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+.msg{font-size:14px;min-height:20px}
+.msg.err{color:var(--warn)}
+.chk{display:flex;gap:8px;align-items:center;font-size:14px;color:var(--mute)}
+.chk input{accent-color:var(--cyan);width:18px;height:18px}
+.moves{display:grid;grid-template-columns:repeat(6,1fr);gap:6px}
+.moves button{padding:8px 0;font-family:var(--mono)}
+details summary{cursor:pointer;font-family:var(--disp);font-size:13px;color:var(--cyan);text-transform:uppercase;letter-spacing:.06em;min-height:28px}
+details[open] summary{margin-bottom:8px}
+.legend{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:14px}
+.legend code{font-family:var(--mono);color:var(--mag)}
+.toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:#0e2f4c;border:1px solid var(--cyan);color:#fff;padding:10px 16px;border-radius:8px;box-shadow:0 0 20px #35e0ff66;opacity:0;pointer-events:none;transition:opacity .3s;z-index:9;font-size:14px}
+.toast.show{opacity:1}
+@media (prefers-reduced-motion:reduce){.floor,.ring,.stk.hl{animation:none}}
+.col{display:flex;flex-direction:column;gap:10px}
+.arrow{position:absolute;pointer-events:none;backface-visibility:hidden;-webkit-backface-visibility:hidden;opacity:0;transition:opacity .2s}
+.arrow.on{opacity:1}
+.arrow svg{width:100%;height:100%;filter:drop-shadow(0 0 6px #ff3df0);animation:apulse 1.2s ease-in-out infinite}
+@keyframes apulse{50%{opacity:.55}}
+.moveline{padding:10px 14px;border-top:1px solid var(--line);display:flex;gap:12px;align-items:center;min-height:56px}
+.moveline .tok{font-family:var(--disp);font-size:26px;color:var(--mag);text-shadow:0 0 12px #ff3df0;min-width:52px}
+.moveline .w{font-size:16px;font-weight:600}
+.moveline .n{font-family:var(--mono);font-size:11px;color:var(--mute)}
+.follow .moveline .tok{font-size:34px}
+.follow .moveline .w{font-size:19px}
+.seg2{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg2 button{border:0;border-radius:0;background:transparent}
+.seg2 button[aria-pressed=true]{background:#14456a;color:#fff;text-shadow:0 0 8px var(--cyan)}
+button.done{flex:1;font-size:18px;min-height:48px}
+.tabs{display:flex;gap:6px}
+.tabs button{flex:1}
+.tabs button.on{border-color:var(--cyan);color:var(--cyan);box-shadow:inset 0 -2px 0 var(--cyan)}
+.scanrow{display:flex;gap:12px;align-items:flex-start;border:1px solid var(--line);border-radius:8px;padding:10px;background:#09111e}
+.scanrow canvas{width:140px;height:140px;border-radius:6px;background:#06090f;touch-action:none;cursor:grab;flex:none}
+.scanrow .info{display:flex;flex-direction:column;gap:6px;min-width:0;flex:1}
+.scanrow .info b{font-family:var(--disp);font-size:13px;color:var(--cyan);letter-spacing:.05em}
+.scanrow .info p{font-size:13px;color:var(--mute)}
+.scanrow .info .row button,.scanrow .info .row label.btn{min-height:36px;padding:6px 10px;font-size:14px}
+label.btn{display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--cyan);border-radius:8px;padding:9px 12px;cursor:pointer;background:#0e2f4c;color:#fff}
+label.btn:focus-within{outline:2px solid var(--mag)}
+label.btn input{position:absolute;opacity:0;width:1px;height:1px}
+.scanrow input[type=range]{accent-color:var(--cyan);width:100%}
+.scanrow.ok{border-color:#1d6b4a}
+.topview{display:grid;grid-template-columns:repeat(5,22px);grid-template-rows:repeat(5,22px);gap:3px;padding:6px}
+.topview i{border-radius:4px;background:var(--c)}
+.topview i.s{transform:scale(.8,.45)}
+.topview i.sv{transform:scale(.45,.8)}
+.topview i.x{background:transparent}
+.tvwrap{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+.tvwrap .lbl{font-family:var(--mono);font-size:11px;color:var(--mute);text-align:center}
+.pats{display:flex;gap:8px;flex-wrap:wrap}
+.pat{display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px;border:1px solid var(--line);border-radius:8px;font-size:12px;color:var(--mute)}
+.pat.on{border-color:var(--mag);color:#fff;box-shadow:0 0 12px #ff3df055}
+.mini{display:grid;grid-template-columns:repeat(3,10px);gap:2px}
+.mini i{width:10px;height:10px;border-radius:2px;background:#2a3446}
+.mini i.y{background:#ffd400;box-shadow:0 0 6px #ffd40088}
+.banner{border:1px solid var(--mag);border-radius:8px;padding:10px;display:flex;flex-direction:column;gap:8px;background:#1a0b20}
+.algrow{display:grid;grid-template-columns:1fr auto;gap:4px 10px;align-items:center;border-bottom:1px solid var(--line);padding-bottom:8px}
+.algrow .nm{font-weight:600}
+.algrow .st{font-family:var(--mono);font-size:11px;color:var(--mute)}
+.algrow code{grid-column:1/-1;font-family:var(--mono);color:var(--cyan);font-size:14px}
+.algrow button{grid-row:1/3;grid-column:2}
+.quiz{border:1px solid var(--line);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:10px;background:#09111e;text-align:center}
+.quiz .q{font-family:var(--disp);font-size:18px;color:#fff}
+.quiz .a{font-family:var(--mono);font-size:18px;color:var(--mag);min-height:26px}
+.clock{font-family:var(--disp);font-size:52px;padding:22px 10px;background:#06101c;border-color:var(--cyan);color:var(--cyan);text-shadow:0 0 18px #35e0ff;font-variant-numeric:tabular-nums}
+.clock.run{color:var(--mag);border-color:var(--mag);text-shadow:0 0 18px #ff3df0}
+select{font:inherit;background:#0f1b30;color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:6px 8px;min-height:36px}
+@media (prefers-reduced-motion:reduce){.arrow svg{animation:none}}
+
+.scanbtn{margin-top:8px;font-size:17px;min-height:48px}
+.scanner{position:fixed;inset:0;z-index:20;background:#03050a;display:flex;flex-direction:column;align-items:center;gap:10px;padding:max(12px,env(safe-area-inset-top)) 16px 16px;overflow-y:auto}
+.scanner[hidden]{display:none}
+.scanner video{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.scHead{width:100%;max-width:420px;display:flex;justify-content:space-between;align-items:center}
+.scHead b{font-family:var(--disp);color:var(--cyan);letter-spacing:.06em;font-size:15px}
+.scView{position:relative;width:min(92vw,420px);aspect-ratio:1;border-radius:14px;overflow:hidden;border:1px solid var(--line);box-shadow:0 0 30px #35e0ff33}
+.scView canvas{width:100%;height:100%;display:block}
+.flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;transition:opacity .35s}
+.flash.on{opacity:.75;transition:none}
+.scTxt{max-width:420px;text-align:center;font-size:17px;font-weight:600;min-height:48px}
+.scThumbs{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+.scThumbs .th{display:flex;flex-direction:column;align-items:center;gap:3px;font-family:var(--mono);font-size:10px;color:var(--mute)}
+.scThumbs .g{display:grid;grid-template-columns:repeat(3,9px);gap:1px;padding:3px;border:1px solid var(--line);border-radius:4px;min-height:35px;min-width:35px}
+.scThumbs .g i{width:9px;height:9px;border-radius:2px}
+.scThumbs .th.now .g{border-color:var(--mag);box-shadow:0 0 8px #ff3df088}
+.scBtns{justify-content:center}
+.scanner .msg{max-width:420px;text-align:center}
+.scanner .msg a{color:var(--cyan)}
+
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>CUBE COACH</h1>
+    <p class="sub">Past the white cross? Pick up here. Hold white on the bottom and follow the glowing pieces.</p>
+    <button class="pri scanbtn" id="liveBtn">&#9673; Scan my cube with the camera</button>
+    <p class="msg err" id="liveErr" hidden></p>
+  </header>
+
+  <section class="card viewer" aria-label="3D cube">
+    <div class="stage" id="stage">
+      <div class="floor"></div><div class="ring r1"></div><div class="ring r2"></div>
+      <div class="world" id="world"><div class="arrow" id="arrow"></div></div>
+      <div class="hud" id="hud"></div>
+      <div class="badge" id="badge"></div>
+      <div class="hint">Drag to rotate</div>
+    </div>
+    <div class="moveline" id="moveline"></div>
+    <div class="bar">
+      <div class="seg2" role="group" aria-label="Mode">
+        <button id="mWatch" aria-pressed="true">Watch</button>
+        <button id="mFollow" aria-pressed="false">Follow along</button>
+      </div>
+      <label class="chk"><input type="checkbox" id="autoView" checked> Auto-turn view</label>
+    </div>
+    <div class="bar">
+      <button class="ctl" id="bBack" title="Undo last move" aria-label="Back one move">&#9198;</button>
+      <button class="ctl pri" id="bPlay" title="Play or pause" aria-label="Play">&#9654;</button>
+      <button class="ctl" id="bNext" title="Next move" aria-label="Next move">&#9197;</button>
+      <button class="pri done" id="bDone" hidden>I did it &#10003;</button>
+      <button id="bFlip">Flip view</button>
+      <label class="grow" id="speedWrap">Speed <input type="range" id="speed" min="0.5" max="3" step="0.1" value="1" aria-label="Speed"></label>
+    </div>
+  </section>
+
+  <section class="card" aria-label="Progress">
+    <h2>Progress</h2>
+    <div class="steps" id="steps"></div>
+  </section>
+
+  <section class="card coach" id="coach" aria-live="polite"></section>
+
+  <section class="card" id="mineCard">
+    <details id="mine">
+      <summary>My cube</summary>
+      <div class="col">
+        <div class="tabs" role="tablist">
+          <button id="tScan" class="on" role="tab">Scan photos</button>
+          <button id="tPaint" role="tab">Paint by hand</button>
+        </div>
+        <div id="pScan" class="col">
+          <p class="sub">Take one photo of each face with <b>white on the bottom</b>. Fill the frame with the face, then drag, zoom or rotate so the grid sits on the stickers.</p>
+          <div id="scanList" class="col"></div>
+          <div class="row"><button class="pri" id="readColors">Read colors</button><button id="clearScan">Clear photos</button></div>
+          <div class="msg" id="scanMsg"></div>
+        </div>
+        <div id="pPaint" class="col" hidden>
+          <p class="sub">Tap a color, then tap stickers to match your cube. The top face sits above, the four sides in a row, the bottom under the front.</p>
+          <div class="pal" id="pal"></div>
+          <div class="net" id="net"></div>
+          <label class="chk"><input type="checkbox" id="whiteTop"> My white center is on top, not the bottom</label>
+          <div class="row">
+            <button class="pri" id="apply">Use this cube</button>
+            <button id="blank">Blank stickers</button>
+          </div>
+        </div>
+        <div class="row">
+          <button id="demo">Demo: cross done</button>
+          <button id="scr">Scramble</button>
+          <button id="rst">Solved</button>
+        </div>
+        <div class="msg" id="msg"></div>
+      </div>
+    </details>
+  </section>
+
+  <section class="card">
+    <details id="practice">
+      <summary>Practice</summary>
+      <div class="col">
+        <div class="tabs" role="tablist">
+          <button id="tAlg" class="on" role="tab">Algorithms</button>
+          <button id="tQuiz" role="tab">Quiz</button>
+          <button id="tTime" role="tab">Timer</button>
+        </div>
+        <div id="pAlg" class="col"></div>
+        <div id="pQuiz" class="col" hidden></div>
+        <div id="pTime" class="col" hidden>
+          <label class="chk">Time <select id="tTarget"></select></label>
+          <button class="clock" id="clock" aria-label="Start or stop timer">0.00</button>
+          <p class="sub" id="tStats"></p>
+          <div class="row"><button id="tClear">Clear times</button></div>
+        </div>
+      </div>
+    </details>
+  </section>
+
+  <section class="card">
+    <details>
+      <summary>Practice moves</summary>
+      <div class="moves" id="moves"></div>
+    </details>
+  </section>
+
+  <section class="card">
+    <details>
+      <summary>Notation guide</summary>
+      <div class="legend">
+        <code>R</code><span>Right column up (right face clockwise, as if you faced it).</span>
+        <code>R'</code><span>Same face, counterclockwise: right column down.</span>
+        <code>R2</code><span>Half turn, either way.</span>
+        <code>L</code><span>Left column down. <code>L'</code> is up.</span>
+        <code>U</code><span>Top row to the left. <code>U'</code> is to the right.</span>
+        <code>D</code><span>Bottom row to the right. <code>D'</code> is to the left.</span>
+        <code>F</code><span>Front face clockwise.</span>
+        <code>B</code><span>Back face: its top row moves left, seen from the front.</span>
+      </div>
+    </details>
+  </section>
+</div>
+<div class="toast" id="toast"></div>
+<div class="scanner" id="scanner" hidden role="dialog" aria-label="Live cube scanner">
+  <video id="vid" playsinline muted autoplay></video>
+  <div class="scHead"><b id="scStep"></b><button id="scClose" aria-label="Close scanner">Close</button></div>
+  <div class="scView"><canvas id="scCv" width="360" height="360"></canvas><div class="flash" id="scFlash"></div></div>
+  <p class="scTxt" id="scTxt"></p>
+  <div class="scThumbs" id="scThumbs"></div>
+  <div class="row scBtns"><button id="scBack">Redo last face</button><button class="pri" id="scSnap">Capture now</button></div>
+  <p class="msg" id="scMsg"></p>
+</div>
+<script>
+'use strict';
+/* Cube engine: 54 facelets, labels 0..5 = U R F D L B (label = the face whose center the sticker belongs to). */
+var SIDE = ['U', 'R', 'F', 'D', 'L', 'B'];
+var NORM = [[0, 1, 0], [1, 0, 0], [0, 0, 1], [0, -1, 0], [-1, 0, 0], [0, 0, -1]];
+var DEFAULT_NAMES = ['yellow', 'orange', 'green', 'white', 'red', 'blue'];
+
+function facePos(f, r, c) {
+  switch (f) {
+    case 0: return [c - 1, 1, r - 1];
+    case 1: return [1, 1 - r, 1 - c];
+    case 2: return [c - 1, 1 - r, 1];
+    case 3: return [c - 1, -1, 1 - r];
+    case 4: return [-1, 1 - r, c - 1];
+    default: return [1 - c, 1 - r, -1];
+  }
+}
+function cross3(a, b) { return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]; }
+function dot3(a, b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }
+
+var ST = [], STKEY = {};
+(function () {
+  for (var f = 0; f < 6; f++) for (var r = 0; r < 3; r++) for (var c = 0; c < 3; c++) {
+    var pos = facePos(f, r, c), i = f * 9 + r * 3 + c;
+    ST.push({ i: i, f: f, r: r, c: c, pos: pos, n: NORM[f] });
+    STKEY[pos.join(',') + '|' + NORM[f].join(',')] = i;
+  }
+})();
+function stIndex(p, n) { return STKEY[p.join(',') + '|' + n.join(',')]; }
+function rotCW(n, v) { var c = cross3(n, v), d = dot3(n, v); return [-c[0] + n[0] * d, -c[1] + n[1] * d, -c[2] + n[2] * d]; }
+
+function mulPerm(a, b) { var r = new Uint8Array(54); for (var i = 0; i < 54; i++) r[i] = b[a[i]]; return r; }
+function invPerm(a) { var r = new Uint8Array(54); for (var i = 0; i < 54; i++) r[a[i]] = i; return r; }
+var PERM = {}, TOKENS = [];
+(function () {
+  for (var f = 0; f < 6; f++) {
+    var n = NORM[f], p = new Uint8Array(54);
+    for (var k = 0; k < 54; k++) {
+      var s = ST[k];
+      if (dot3(s.pos, n) === 1) p[k] = stIndex(rotCW(n, s.pos), rotCW(n, s.n)); else p[k] = k;
+    }
+    var nm = SIDE[f];
+    PERM[nm] = p; PERM[nm + '2'] = mulPerm(p, p); PERM[nm + "'"] = invPerm(p);
+    TOKENS.push(nm, nm + "'", nm + '2');
+  }
+})();
+function parseAlg(s) { return s.trim().split(/\s+/); }
+function invTok(t) { return t.length === 1 ? t + "'" : (t[1] === "'" ? t[0] : t); }
+function invAlg(a) { return a.slice().reverse().map(invTok); }
+function algPerm(a) { var p = PERM[a[0]]; for (var i = 1; i < a.length; i++) p = mulPerm(p, PERM[a[i]]); return p; }
+function applyPerm(s, p) { var r = new Uint8Array(54); for (var i = 0; i < 54; i++) r[p[i]] = s[i]; return r; }
+function applyAlg(s, a) { for (var i = 0; i < a.length; i++) s = applyPerm(s, PERM[a[i]]); return s; }
+function solvedState() { var s = new Uint8Array(54); for (var i = 0; i < 54; i++) s[i] = ST[i].f; return s; }
+
+/* slots */
+var EDGE_SLOTS = [], CORNER_SLOTS = [];
+(function () {
+  for (var x = -1; x <= 1; x++) for (var y = -1; y <= 1; y++) for (var z = -1; z <= 1; z++) {
+    var nz = (x ? 1 : 0) + (y ? 1 : 0) + (z ? 1 : 0);
+    if (nz < 2) continue;
+    var sts = ST.filter(function (s) { return s.pos[0] === x && s.pos[1] === y && s.pos[2] === z; });
+    var order;
+    if (nz === 3) {
+      var a = sts.filter(function (s) { return s.n[1] !== 0; })[0];
+      var o = sts.filter(function (s) { return s.n[1] === 0; });
+      var det = dot3(a.n, cross3(o[0].n, o[1].n));
+      order = det > 0 ? [a, o[0], o[1]] : [a, o[1], o[0]];
+    } else {
+      var v = sts.filter(function (s) { return s.n[1] !== 0; })[0];
+      var first = v || sts.filter(function (s) { return s.n[2] !== 0; })[0];
+      var second = sts.filter(function (s) { return s !== first; })[0];
+      order = [first, second];
+    }
+    var slot = { pos: [x, y, z], st: order.map(function (s) { return s.i; }) };
+    slot.home = keyOf(slot.st.map(function (i) { return ST[i].f; }));
+    (nz === 3 ? CORNER_SLOTS : EDGE_SLOTS).push(slot);
+  }
+})();
+function keyOf(a) { return a.slice().sort(function (p, q) { return p - q; }).join(''); }
+function lab(s, slot) { return slot.st.map(function (i) { return s[i]; }); }
+function pieceSolved(s, slot) { for (var k = 0; k < slot.st.length; k++) if (s[slot.st[k]] !== ST[slot.st[k]].f) return false; return true; }
+function findSlot(s, slots, key) { for (var i = 0; i < slots.length; i++) if (keyOf(lab(s, slots[i])) === key) return slots[i]; return null; }
+function slotsAt(slots, y) { return slots.filter(function (s) { return s.pos[1] === y; }); }
+
+/* validation of a user-entered cube */
+function parity(perm) { var seen = [], c = 0; for (var i = 0; i < perm.length; i++) { if (seen[i]) continue; c++; var j = i; while (!seen[j]) { seen[j] = 1; j = perm[j]; } } return (perm.length - c) % 2; }
+function validate(s) {
+  var cnt = [0, 0, 0, 0, 0, 0], i;
+  for (i = 0; i < 54; i++) cnt[s[i]]++;
+  for (i = 0; i < 6; i++) if (cnt[i] !== 9) return 'Each color must appear exactly 9 times.';
+  for (i = 0; i < 6; i++) if (s[i * 9 + 4] !== i) return 'Centers are inconsistent.';
+  function pieces(slots) {
+    var seen = {}, perm = [];
+    for (var k = 0; k < slots.length; k++) {
+      var key = keyOf(lab(s, slots[k]));
+      var idx = -1;
+      for (var h = 0; h < slots.length; h++) if (slots[h].home === key) idx = h;
+      if (idx < 0 || seen[idx]) return null;
+      seen[idx] = 1; perm.push(idx);
+    }
+    return perm;
+  }
+  var cp = pieces(CORNER_SLOTS), ep = pieces(EDGE_SLOTS);
+  if (!cp) return 'Some corner is impossible. Check that every corner shows three different colors that belong together.';
+  if (!ep) return 'Some edge is impossible. Check that every edge shows two different colors that belong together.';
+  var tw = 0;
+  CORNER_SLOTS.forEach(function (c) { var l = lab(s, c); for (var k = 0; k < 3; k++) if (l[k] === 0 || l[k] === 3) tw += k; });
+  if (tw % 3 !== 0) return 'One corner looks twisted. Recheck the corner stickers.';
+  var fl = 0;
+  EDGE_SLOTS.forEach(function (e) {
+    var l = lab(s, e), prim;
+    if (l.indexOf(0) >= 0) prim = 0; else if (l.indexOf(3) >= 0) prim = 3; else prim = l.indexOf(2) >= 0 ? 2 : 5;
+    if (l[0] !== prim) fl++;
+  });
+  if (fl % 2 !== 0) return 'One edge looks flipped. Recheck the edge stickers.';
+  if (parity(cp) !== parity(ep)) return 'Two pieces look swapped. Recheck the stickers.';
+  return null;
+}
+
+/* stage predicates */
+function allSolved(s, slots) { return slots.every(function (x) { return pieceSolved(s, x); }); }
+var DE = slotsAt(EDGE_SLOTS, -1), DC = slotsAt(CORNER_SLOTS, -1), ME = slotsAt(EDGE_SLOTS, 0), UE = slotsAt(EDGE_SLOTS, 1), UC = slotsAt(CORNER_SLOTS, 1);
+function yEdgesUp(s) { return UE.every(function (e) { return s[e.st[0]] === 0; }); }
+function yFaceUp(s) { for (var i = 0; i < 9; i++) if (s[i] !== 0) return false; return true; }
+function stageOf(s) {
+  if (!allSolved(s, DE)) return 1;
+  if (!allSolved(s, DC)) return 2;
+  if (!allSolved(s, ME)) return 3;
+  if (!yEdgesUp(s)) return 4;
+  if (!yFaceUp(s)) return 5;
+  if (!allSolved(s, UC)) return 6;
+  if (!allSolved(s, UE)) return 7;
+  return 8;
+}
+function progress(s) {
+  function n(sl) { return sl.filter(function (x) { return pieceSolved(s, x); }).length; }
+  return { 1: [n(DE), 4], 2: [n(DC), 4], 3: [n(ME), 4], 4: [UE.filter(function (e) { return s[e.st[0]] === 0; }).length, 4], 5: [UC.filter(function (c) { return s[c.st[0]] === 0; }).length, 4], 6: [n(UC), 4], 7: [n(UE), 4] };
+}
+
+/* ---- solvers ---- */
+function solveCross(s) {
+  var tg = DE.map(function (slot) {
+    var d = slot.st.filter(function (i) { return ST[i].f === 3; })[0];
+    var o = slot.st.filter(function (i) { return i !== d; })[0];
+    return { d: d, o: o };
+  });
+  var start = [], goal = [];
+  tg.forEach(function (t) {
+    var key = keyOf([3, ST[t.o].f]);
+    var cur = findSlot(s, EDGE_SLOTS, key);
+    var dI = cur.st.filter(function (i) { return s[i] === 3; })[0];
+    var oI = cur.st.filter(function (i) { return i !== dI; })[0];
+    start.push(dI, oI); goal.push(t.d, t.o);
+  });
+  function key(a) { var k = 0; for (var i = 0; i < 8; i++) k = k * 54 + a[i]; return k; }
+  var gk = key(goal), sk = key(start);
+  if (gk === sk) return [];
+  var perms = TOKENS.map(function (t) { return PERM[t]; });
+  var parent = new Map(); parent.set(sk, -1);
+  var frontier = [start], found = false;
+  while (frontier.length && !found) {
+    var next = [];
+    for (var fi = 0; fi < frontier.length && !found; fi++) {
+      var cur2 = frontier[fi], ck = key(cur2);
+      for (var m = 0; m < 18; m++) {
+        var p = perms[m], k = 0;
+        for (var i = 0; i < 8; i++) k = k * 54 + p[cur2[i]];
+        if (parent.has(k)) continue;
+        parent.set(k, ck * 18 + m);
+        if (k === gk) { found = true; break; }
+        var nx = new Array(8);
+        for (var j = 0; j < 8; j++) nx[j] = p[cur2[j]];
+        next.push(nx);
+      }
+    }
+    frontier = next;
+  }
+  var moves = [], k2 = gk;
+  while (parent.get(k2) !== -1) { var v = parent.get(k2), mm = v % 18; moves.push(TOKENS[mm]); k2 = (v - mm) / 18; }
+  return moves.reverse();
+}
+
+function cornerMacro(slot) {
+  var x = slot.pos[0], z = slot.pos[2];
+  var X = x === 1 ? (z === 1 ? 'R' : 'B') : (z === 1 ? 'F' : 'L');
+  return [X, 'U', X + "'", "U'"];
+}
+var URIGHT = { 2: 1, 1: 5, 5: 4, 4: 2 }, ULEFT = { 2: 4, 1: 2, 5: 1, 4: 5 };
+function insertRight(f) { var F = SIDE[f], R = SIDE[URIGHT[f]]; return ['U', R, "U'", R + "'", "U'", F + "'", 'U', F]; }
+function insertLeft(f) { var F = SIDE[f], L = SIDE[ULEFT[f]]; return ["U'", L + "'", 'U', L, 'U', F, "U'", F + "'"]; }
+var UTRIES = [[], ['U'], ['U2'], ["U'"]];
+
+function cornerName(labels, names) { return labels.slice().sort(function (a, b) { return a - b; }).map(function (l) { return names[l]; }).join('-'); }
+
+function planCorners(state, names) {
+  var s = state, segs = [];
+  DC.forEach(function (target) {
+    var labs = target.st.map(function (i) { return ST[i].f; });
+    var nm = cornerName(labs, names) + ' corner';
+    var guard = 0;
+    while (!pieceSolved(s, target) && guard++ < 12) {
+      var cur = findSlot(s, CORNER_SLOTS, target.home);
+      if (cur.pos[1] === -1) {
+        var alg = cornerMacro(cur);
+        s = applyAlg(s, alg);
+        segs.push({ title: nm + ': pop it out', text: 'It is in the bottom layer but not home. Run the corner algorithm once to lift it into the top layer.', moves: alg, focus: [labs.slice()] });
+        continue;
+      }
+      var kk = 0;
+      for (var j = 0; j < 4; j++) {
+        var c2 = findSlot(applyAlg(s, UTRIES[j]), CORNER_SLOTS, target.home);
+        if (c2.pos[0] === target.pos[0] && c2.pos[2] === target.pos[2]) { kk = j; break; }
+      }
+      if (UTRIES[kk].length) {
+        s = applyAlg(s, UTRIES[kk]);
+        segs.push({ title: nm + ': line it up', text: 'Turn the top layer until the corner sits directly above its home slot.', moves: UTRIES[kk], focus: [labs.slice()] });
+      }
+      var a2 = cornerMacro(target), reps = 0, all = [];
+      while (!pieceSolved(s, target) && reps < 6) { s = applyAlg(s, a2); all = all.concat(a2); reps++; }
+      segs.push({ title: nm + ': drop it in', text: 'Repeat ' + a2.join(' ') + ' ' + reps + (reps === 1 ? ' time' : ' times') + ' until the corner clicks into place.', moves: all, focus: [labs.slice()] });
+    }
+  });
+  return { segs: segs, end: s };
+}
+
+/* shortest sequence (from a move subset) that solves `keep` pieces */
+function searchKeep(s, keep, moves, maxD) {
+  var start = [], goal = [];
+  keep.forEach(function (slot) {
+    var cur = findSlot(s, slot.st.length === 3 ? CORNER_SLOTS : EDGE_SLOTS, slot.home);
+    slot.st.forEach(function (i) {
+      for (var k = 0; k < cur.st.length; k++) if (s[cur.st[k]] === ST[i].f) { start.push(cur.st[k]); break; }
+      goal.push(i);
+    });
+  });
+  var n = start.length, perms = moves.map(function (m) { return PERM[m]; }), faces = moves.map(function (m) { return m[0]; }), path = [];
+  function dfs(a, d, lf) {
+    var ok = true;
+    for (var i = 0; i < n; i++) if (a[i] !== goal[i]) { ok = false; break; }
+    if (ok) return true;
+    if (!d) return false;
+    for (var m = 0; m < perms.length; m++) {
+      if (faces[m] === lf) continue;
+      var p = perms[m], b = new Array(n);
+      for (var j = 0; j < n; j++) b[j] = p[a[j]];
+      path.push(moves[m]);
+      if (dfs(b, d - 1, faces[m])) return true;
+      path.pop();
+    }
+    return false;
+  }
+  for (var d = 0; d <= maxD; d++) { path = []; if (dfs(start, d, '')) return path; }
+  return null;
+}
+function planCornersShort(state, names) {
+  var s = state, segs = [];
+  DC.forEach(function (target) {
+    if (pieceSolved(s, target)) return;
+    var labs = target.st.map(function (i) { return ST[i].f; }), nm = cornerName(labs, names) + ' corner';
+    var cur = findSlot(s, CORNER_SLOTS, target.home);
+    if (cur.pos[1] === -1 && (cur.pos[0] !== target.pos[0] || cur.pos[2] !== target.pos[2])) {
+      var alg = cornerMacro(cur); s = applyAlg(s, alg);
+      segs.push({ title: nm + ': pop it out', text: 'It is in the wrong bottom slot. Lift it into the top layer first.', moves: alg, focus: [labs.slice()] });
+    }
+    var fx = target.pos[0] === 1 ? 'R' : 'L', fz = target.pos[2] === 1 ? 'F' : 'B';
+    var keep = DE.concat(DC.filter(function (c) { return c === target || pieceSolved(s, c); }));
+    var sol = searchKeep(s, keep, ['U', "U'", 'U2', fx, fx + "'", fz, fz + "'"], 10);
+    if (!sol) throw new Error('corner search failed');
+    s = applyAlg(s, sol);
+    segs.push({ title: nm + ': insert it', text: 'The shortest insert for this corner. Watch which way the white sticker faces before it drops in.', moves: sol, focus: [labs.slice()] });
+  });
+  return { segs: segs, end: s };
+}
+
+function planMiddle(state, names) {
+  var s = state, segs = [], guard = 0;
+  while (!allSolved(s, ME) && guard++ < 40) {
+    var done = false;
+    var cands = UE.filter(function (e) { return lab(s, e).indexOf(0) < 0; });
+    if (cands.length) {
+      var e0 = cands[0], key = keyOf(lab(s, e0));
+      for (var j = 0; j < 4 && !done; j++) {
+        var s2 = applyAlg(s, UTRIES[j]);
+        var sl = findSlot(s2, EDGE_SLOTS, key);
+        var side = ST[sl.st[1]].f;
+        if (s2[sl.st[1]] === side) {
+          var t = s2[sl.st[0]], right = (t === URIGHT[side]);
+          var alg = right ? insertRight(side) : insertLeft(side);
+          var labs = lab(s2, sl);
+          var mv = UTRIES[j].concat(alg);
+          s = applyAlg(s, mv);
+          segs.push({ title: names[labs[0]] + '-' + names[labs[1]] + ' edge: send it ' + (right ? 'right' : 'left'),
+            text: 'Turn the top until the side color matches the ' + names[side] + ' center, then send the edge to the ' + (right ? 'right' : 'left') + '.',
+            moves: mv, focus: [labs.slice()] });
+          done = true;
+        }
+      }
+      if (!done) break;
+    } else {
+      var bad = ME.filter(function (e) { return !pieceSolved(s, e); })[0];
+      var x = bad.pos[0], z = bad.pos[2];
+      var f = x === 1 ? (z === 1 ? 2 : 1) : (z === 1 ? 4 : 5);
+      var alg2 = insertRight(f);
+      var lb = lab(s, bad);
+      s = applyAlg(s, alg2);
+      segs.push({ title: 'Free a stuck edge', text: 'A middle edge sits in the wrong slot. Run the insert algorithm on that slot to pop it up to the top.', moves: alg2, focus: [lb.slice()] });
+    }
+  }
+  return { segs: segs, end: s };
+}
+
+function macro(name, algStr, isU) { var t = parseAlg(algStr); return { name: name, tokens: t, perm: algPerm(t), isU: isU }; }
+function macroSearch(state, macros, goal, maxD) {
+  var path = [];
+  function dfs(s, d, lastU) {
+    if (goal(s)) return true;
+    if (d === 0) return false;
+    for (var i = 0; i < macros.length; i++) {
+      var m = macros[i];
+      if (lastU && m.isU) continue;
+      path.push(m);
+      if (dfs(applyPerm(s, m.perm), d - 1, m.isU)) return true;
+      path.pop();
+    }
+    return false;
+  }
+  for (var d = 0; d <= maxD; d++) { path = []; if (dfs(state, d, false)) return path; }
+  return null;
+}
+var UM = [macro('U', 'U', true), macro("U'", "U'", true), macro('U2', 'U2', true)];
+function planMacro(state, algs, goal, maxD, algTitle, algText, focus) {
+  var path = macroSearch(state, UM.concat(algs), goal, maxD);
+  if (!path) throw new Error('no plan');
+  var s = state, segs = [], pass = 0;
+  path.forEach(function (m) {
+    s = applyPerm(s, m.perm);
+    if (m.isU) segs.push({ title: 'Line up the top layer', text: 'Turn the top layer so the pattern matches what the algorithm expects.', moves: m.tokens, focus: focus });
+    else { pass++; segs.push({ title: algTitle + ' (pass ' + pass + ')', text: algText, moves: m.tokens, focus: focus }); }
+  });
+  return { segs: segs, end: s };
+}
+var A_YC = macro('yc', "F R U R' U' F'", false);
+var A_SUNE = macro('sune', "R U R' U R U2 R'", false);
+var A_CORN = macro('corn', "U R U' L' U R' U' L", false);
+var A_UA = macro('ua', "R U' R U R U R U' R' U' R2", false);
+var A_UB = macro('ub', "R2 U R U R' U' R' U' R' U R'", false);
+
+function planStage(state, names, opts) {
+  names = names || DEFAULT_NAMES; opts = opts || {};
+  var st = stageOf(state), r;
+  var yEdges = [[0, 2], [0, 1], [0, 5], [0, 4]], yCorners = [[0, 1, 2], [0, 2, 4], [0, 4, 5], [0, 5, 1]];
+  if (st === 1) {
+    var mv = solveCross(state);
+    r = { segs: [{ title: 'Build the white cross', text: 'Shortest sequence that places all four white edges next to their matching centers.', moves: mv, focus: [[3, 2], [3, 1], [3, 5], [3, 4]] }], end: applyAlg(state, mv) };
+  } else if (st === 2) r = opts.short ? planCornersShort(state, names) : planCorners(state, names);
+  else if (st === 3) r = planMiddle(state, names);
+  else if (st === 4) r = planMacro(state, [A_YC], yEdgesUp, 8, 'Yellow cross algorithm', 'Run F R U R\' U\' F\'. Repeat until a yellow plus appears.', yEdges);
+  else if (st === 5) r = planMacro(state, [A_SUNE], yFaceUp, 9, 'Sune', 'Run the Sune to twist corners face up. The bottom two layers stay intact.', yCorners);
+  else if (st === 6) r = planMacro(state, [A_CORN], function (s) { return allSolved(s, UC); }, 9, 'Corner swap', 'Cycle three corners while keeping their twist.', yCorners);
+  else if (st === 7) r = planMacro(state, [A_UA, A_UB], function (s) { return stageOf(s) === 8; }, 8, 'Edge cycle', 'Cycle three top edges. Everything else stays put.', yEdges);
+  else return null;
+  r.stage = st;
+  return r;
+}
+
+function scrambleMoves(n) {
+  var out = [], last = -1;
+  while (out.length < n) {
+    var f = Math.floor(Math.random() * 6);
+    if (f === last) continue;
+    last = f;
+    out.push(SIDE[f] + ['', "'", '2'][Math.floor(Math.random() * 3)]);
+  }
+  return out;
+}
+function randomState() { return applyAlg(solvedState(), scrambleMoves(25)); }
+function demoState() { var s = randomState(); return applyAlg(s, solveCross(s)); }
+
+
+</script>
+<script>
+(function () {
+  var COLORS = ['#f4f8ff', '#ffd400', '#19e36b', '#2f6bff', '#ff3b4a', '#ff8a1f', '#3a4558'];
+  var CNAMES = ['white', 'yellow', 'green', 'blue', 'red', 'orange', 'blank'];
+  var DEF_SCHEME = [1, 5, 2, 0, 4, 3]; // label -> color id
+  var STAGES = [
+    null,
+    { name: 'White cross', short: 'Cross', body: 'Four {W} edges form a plus on the bottom, and each edge also matches the center color on its side.', alg: '', tip: 'Hold {W} on the bottom for every step from here on.' },
+    { name: 'White corners', short: 'Corners', body: 'Finish the bottom layer. Find a {W} corner in the top layer, turn the top until it sits right above its home slot, then repeat the algorithm until it drops in. A {W} corner stuck in the wrong bottom spot needs the algorithm once to pop it up.', alg: "R U R' U'", tip: 'Repeat it 1 to 5 times. Watch the corner twist each pass.' },
+    { name: 'Middle layer', short: 'Middle', body: 'Find a top edge with no {Y}. Turn the top until its side color matches the center below it. Then send it left or right, depending on which center its top color matches.', alg: "Right: U R U' R' U' F' U F\nLeft:  U' L' U L U F U' F'", tip: 'If every top edge has {Y} but the middle is unfinished, run one algorithm on the stuck slot to pop its edge out.' },
+    { name: 'Yellow cross', short: 'Y-Cross', body: 'Make a {Y} plus on top. Match your top to one of the pictures below.', alg: "F R U R' U' F'", tip: '<b>Line:</b> hold it left to right, run once. <b>L:</b> point it to the back and left, run twice. <b>Dot:</b> run once to get an L or a line. Ignore the corners for now.' },
+    { name: 'Yellow face', short: 'Y-Face', body: 'Turn every {Y} corner face up with the Sune. You need at most three.', alg: "R U R' U R U2 R'", tip: '<b>One corner up (a fish):</b> put that corner at front left, then Sune. <b>None or two up:</b> turn the top until the front-left corner shows {Y} on its left side, then Sune.' },
+    { name: 'Corner positions', short: 'Place', body: 'Move the {Y} corners to their correct spots. Find a corner already sitting between its two matching centers (it may look twisted). Hold it at front right and run the algorithm. Repeat if needed.', alg: "U R U' L' U R' U' L", tip: 'No corner in the right spot? Run the algorithm once from anywhere, then look again.' },
+    { name: 'Final edges', short: 'Finish', body: 'Cycle the last three edges into place. Keep the finished edge at the back and run the first algorithm.', alg: "R U' R U R U R U' R' U' R2\nor R2 U R U R' U' R' U' R' U R'", tip: 'If the edges moved the wrong way, use the second algorithm instead. No edge finished? Run either once, then look again.' }
+  ];
+  var ALGS = [
+    { id: 'corner', name: 'Corner insert', step: 2, alg: "R U R' U'" },
+    { id: 'midR', name: 'Middle edge, right', step: 3, alg: "U R U' R' U' F' U F" },
+    { id: 'midL', name: 'Middle edge, left', step: 3, alg: "U' L' U L U F U' F'" },
+    { id: 'yc', name: 'Yellow cross', step: 4, alg: "F R U R' U' F'" },
+    { id: 'sune', name: 'Sune', step: 5, alg: "R U R' U R U2 R'" },
+    { id: 'corn', name: 'Corner swap', step: 6, alg: "U R U' L' U R' U' L" },
+    { id: 'ua', name: 'Edge cycle', step: 7, alg: "R U' R U R U R U' R' U' R2" }
+  ];
+  var AXIS = { R: ['rotateX', 1], L: ['rotateX', -1], U: ['rotateY', -1], D: ['rotateY', 1], F: ['rotateZ', 1], B: ['rotateZ', -1] };
+  var WORDS = { R: ['Right column up', 'Right column down'], L: ['Left column down', 'Left column up'], U: ['Top row to the left', 'Top row to the right'], D: ['Bottom row to the right', 'Bottom row to the left'], F: ['Front face clockwise', 'Front face counterclockwise'], B: ['Back face, top row moves left (seen from front)', 'Back face, top row moves right (seen from front)'] };
+  var HALF = { R: 'Right column', L: 'Left column', U: 'Top row', D: 'Bottom row', F: 'Front face', B: 'Back face' };
+  var CAM = { U: [-26, null], D: [26, null], F: [null, null], R: [null, -38], L: [null, 38], B: [null, 142] };
+  var $ = function (id) { return document.getElementById(id); };
+  function words(t) { return t[1] === '2' ? HALF[t[0]] + ', half turn' : WORDS[t[0]][t[1] === "'" ? 1 : 0]; }
+
+  /* ---------- saved settings ---------- */
+  var KEY = 'cubecoach.v2', saved = {};
+  try { saved = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { saved = {}; }
+  var state = solvedState(), scheme = DEF_SCHEME.slice();
+  var mode = saved.mode || 'watch', autoView = saved.autoView !== false, shortC = !!saved.shortC, spotlight = saved.spotlight !== false;
+  var speed = saved.speed || 1, stats = saved.stats || { quiz: {}, times: {} };
+  stats.quiz = stats.quiz || {}; stats.times = stats.times || {};
+  var plan = null, busy = false, playing = false, focusKeys = null, stash = null;
+  var S = 54, rx = -26, ry = -38, spin = !saved.state, cam = null;
+  function save() {
+    try {
+      var st = stash ? stash.state : state, sc = stash ? stash.scheme : scheme;
+      localStorage.setItem(KEY, JSON.stringify({ state: Array.prototype.slice.call(st), scheme: sc, mode: mode, autoView: autoView, shortC: shortC, spotlight: spotlight, speed: speed, stats: stats }));
+    } catch (e) { /* storage unavailable */ }
+  }
+  function nm() { return scheme.map(function (c) { return CNAMES[c]; }); }
+  function fill(t) { var n = nm(); return t.replace(/\{Y\}/g, n[0]).replace(/\{W\}/g, n[3]); }
+
+  /* ---------- 3D cube ---------- */
+  var world = $('world'), stage = $('stage'), arrow = $('arrow'), cubies = [];
+  var DIRS = [
+    { n: [0, 0, 1], t: function (h) { return 'translateZ(' + h + 'px)'; } },
+    { n: [0, 0, -1], t: function (h) { return 'rotateY(180deg) translateZ(' + h + 'px)'; } },
+    { n: [1, 0, 0], t: function (h) { return 'rotateY(90deg) translateZ(' + h + 'px)'; } },
+    { n: [-1, 0, 0], t: function (h) { return 'rotateY(-90deg) translateZ(' + h + 'px)'; } },
+    { n: [0, 1, 0], t: function (h) { return 'rotateX(90deg) translateZ(' + h + 'px)'; } },
+    { n: [0, -1, 0], t: function (h) { return 'rotateX(-90deg) translateZ(' + h + 'px)'; } }
+  ];
+  function build() {
+    for (var x = -1; x <= 1; x++) for (var y = -1; y <= 1; y++) for (var z = -1; z <= 1; z++) {
+      var el = document.createElement('div'); el.className = 'cubie';
+      var c = { pos: [x, y, z], el: el, faces: [], fe: [] };
+      DIRS.forEach(function (d) {
+        var f = document.createElement('div'); f.className = 'face';
+        c.fe.push({ el: f, d: d });
+        var out = (d.n[0] && d.n[0] === x) || (d.n[1] && d.n[1] === y) || (d.n[2] && d.n[2] === z);
+        if (out) { var s = document.createElement('div'); s.className = 'stk'; f.appendChild(s); c.faces.push({ idx: stIndex(c.pos, d.n), el: s }); }
+        el.appendChild(f);
+      });
+      world.appendChild(el); cubies.push(c);
+    }
+    layout();
+  }
+  function layout() {
+    var w = stage.clientWidth || 360;
+    S = Math.max(40, Math.min(68, Math.round(w * 0.15)));
+    cubies.forEach(function (c) {
+      c.fe.forEach(function (f) { f.el.style.width = f.el.style.height = S + 'px'; f.el.style.left = f.el.style.top = (-S / 2) + 'px'; f.el.style.transform = f.d.t(S / 2); });
+      c.el.style.transform = base(c);
+    });
+    var A = Math.round(S * 2.7);
+    arrow.style.width = arrow.style.height = A + 'px'; arrow.style.left = arrow.style.top = (-A / 2) + 'px';
+    if (arrow.dataset.tok) showArrow(arrow.dataset.tok);
+  }
+  function base(c) { return 'translate3d(' + c.pos[0] * S + 'px,' + (-c.pos[1] * S) + 'px,' + c.pos[2] * S + 'px)'; }
+  function applyView() { world.style.transform = 'rotateX(' + rx + 'deg) rotateY(' + ry + 'deg)'; }
+
+  function arrowSVG(ccw, half) {
+    var r = 36, a1 = 200 * Math.PI / 180, a2 = 480 * Math.PI / 180, f = function (v) { return v.toFixed(1); };
+    var x1 = 50 + r * Math.cos(a1), y1 = 50 + r * Math.sin(a1), x2 = 50 + r * Math.cos(a2), y2 = 50 + r * Math.sin(a2);
+    var tx = -Math.sin(a2), ty = Math.cos(a2), nx = Math.cos(a2), ny = Math.sin(a2);
+    var pts = [[x2 + tx * 12, y2 + ty * 12], [x2 + nx * 9, y2 + ny * 9], [x2 - nx * 9, y2 - ny * 9]].map(function (p) { return f(p[0]) + ',' + f(p[1]); }).join(' ');
+    var g = '<path d="M' + f(x1) + ' ' + f(y1) + ' A' + r + ' ' + r + ' 0 1 1 ' + f(x2) + ' ' + f(y2) + '" fill="none" stroke="#ff3df0" stroke-width="7" stroke-linecap="round"/><polygon points="' + pts + '" fill="#ff3df0"/>';
+    if (ccw) g = '<g transform="translate(100 0) scale(-1 1)">' + g + '</g>';
+    if (half) g += '<text x="50" y="62" text-anchor="middle" font-family="Orbitron,sans-serif" font-size="34" font-weight="700" fill="#fff">2</text>';
+    return '<svg viewBox="0 0 100 100" aria-hidden="true">' + g + '</svg>';
+  }
+  function showArrow(tok) {
+    if (!tok) { arrow.classList.remove('on'); arrow.dataset.tok = ''; return; }
+    var n = NORM[SIDE.indexOf(tok[0])], d = DIRS.filter(function (x) { return x.n.join() === n.join(); })[0];
+    if (arrow.dataset.tok !== tok) arrow.innerHTML = arrowSVG(tok[1] === "'", tok[1] === '2');
+    arrow.dataset.tok = tok;
+    arrow.style.transform = d.t(1.85 * S);
+    arrow.classList.add('on');
+  }
+  function aimCamera(tok) {
+    if (!autoView || !tok) return;
+    var c = CAM[tok[0]], tx = c[0] === null ? (rx > 0 && tok[0] !== 'D' ? -26 : rx) : c[0], ty = c[1] === null ? ry : c[1];
+    if (c[1] === null && tok[0] === 'F') { var m = ((ry % 360) + 540) % 360 - 180; if (Math.abs(m) > 70) ty = -38; }
+    if (c[1] !== null || ty !== ry) ty = ty + 360 * Math.round((ry - ty) / 360);
+    if (tok[0] === 'U' || tok[0] === 'D') { var m2 = ((ry % 360) + 540) % 360 - 180; if (Math.abs(m2) > 70) ty = -38 + 360 * Math.round((ry + 38) / 360); }
+    cam = [tx, ty]; spin = false;
+  }
+
+  function paint() {
+    cubies.forEach(function (c) {
+      var labs = c.faces.map(function (f) { return state[f.idx]; });
+      var dim = false, hl = false;
+      if (focusKeys && spotlight) { hl = focusKeys.indexOf(keyOf(labs)) >= 0; dim = !hl; }
+      c.faces.forEach(function (f) { f.el.style.setProperty('--c', COLORS[scheme[state[f.idx]]]); f.el.classList.toggle('dim', dim); f.el.classList.toggle('hl', hl); });
+    });
+  }
+
+  function turn(tok) {
+    return new Promise(function (res) {
+      var f = SIDE.indexOf(tok[0]), mod = tok[1];
+      var dir = mod === "'" ? -1 : mod === '2' ? 2 : 1, ax = AXIS[tok[0]];
+      var layer = cubies.filter(function (c) { return c.pos[0] * NORM[f][0] + c.pos[1] * NORM[f][1] + c.pos[2] * NORM[f][2] === 1; });
+      layer.forEach(function (c) { c.faces.forEach(function (x) { x.el.classList.add('turn'); }); });
+      $('badge').textContent = tok; showArrow(tok);
+      var total = ax[1] * 90 * dir, dur = (dir === 2 ? 620 : 420) / speed, t0 = performance.now();
+      if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) dur = 1;
+      (function step(t) {
+        var p = Math.min(1, (t - t0) / dur), e = p < .5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
+        layer.forEach(function (c) { c.el.style.transform = ax[0] + '(' + (total * e) + 'deg) ' + base(c); });
+        if (p < 1) requestAnimationFrame(step);
+        else {
+          state = applyPerm(state, PERM[tok]);
+          layer.forEach(function (c) { c.el.style.transform = base(c); c.faces.forEach(function (x) { x.el.classList.remove('turn'); }); });
+          paint(); res();
+        }
+      })(t0);
+    });
+  }
+
+  /* ---------- plan / playback ---------- */
+  function setFocus(list) { focusKeys = list ? list.map(keyOf) : null; paint(); }
+  function makePlan(segs, extra) {
+    var flat = [];
+    segs.forEach(function (g, si) { g.moves.forEach(function (m, mi) { flat.push({ tok: m, si: si, mi: mi }); }); });
+    var p = { segs: segs, flat: flat, idx: 0 };
+    for (var k in extra) p[k] = extra[k];
+    return p;
+  }
+  function ensurePlan() {
+    if (plan) return plan;
+    if (stash) return null;
+    var p = planStage(state, nm(), { short: shortC });
+    if (!p) return null;
+    plan = makePlan(p.segs, { stage: p.stage });
+    if (!plan.flat.length) { plan = null; return null; }
+    setFocus(p.segs[0].focus); renderCoach(); syncMove(); return plan;
+  }
+  function fwd() {
+    if (busy) return Promise.resolve();
+    if (!ensurePlan()) return Promise.resolve();
+    var cur = plan.flat[plan.idx];
+    if (!cur) return Promise.resolve();
+    busy = true; setFocus(plan.segs[cur.si].focus); aimCamera(cur.tok);
+    return turn(cur.tok).then(function () {
+      busy = false; plan.idx++;
+      var nx = plan.flat[plan.idx];
+      if (nx) { setFocus(plan.segs[nx.si].focus); updateList(); hud(); syncMove(); }
+      else finishPlan();
+    });
+  }
+  function back() {
+    if (busy || !plan || plan.idx === 0) return Promise.resolve();
+    busy = true; playing = false; setPlayIcon();
+    var prev = plan.flat[plan.idx - 1];
+    setFocus(plan.segs[prev.si].focus); aimCamera(prev.tok);
+    return turn(invTok(prev.tok)).then(function () { busy = false; plan.idx--; updateList(); hud(); syncMove(); });
+  }
+  function finishPlan() {
+    var p = plan; plan = null; playing = false; setPlayIcon(); setFocus(null); $('badge').textContent = '';
+    if (p.custom) { toast(p.segs[0].title + ' done'); refresh(); return; }
+    var st = stageOf(state);
+    toast(st === 8 ? 'Cube solved!' : 'Step ' + p.stage + ' complete. Next: ' + STAGES[st].name);
+    if (st < 8) ensurePlan();
+    refresh();
+  }
+  function setPlayIcon() { $('bPlay').innerHTML = playing ? '&#9208;' : '&#9654;'; $('bPlay').setAttribute('aria-label', playing ? 'Pause' : 'Play'); }
+  function playLoop() {
+    if (!playing) return;
+    if (!plan && !ensurePlan()) { playing = false; setPlayIcon(); return; }
+    fwd().then(function () { if (playing && plan) setTimeout(playLoop, 140 / speed); else { playing = false; setPlayIcon(); } });
+  }
+  function stopAll() { playing = false; setPlayIcon(); plan = null; setFocus(null); }
+  function userMove(tok) {
+    if (busy) return; spin = false; stopAll();
+    busy = true; turn(tok).then(function () { busy = false; $('badge').textContent = ''; refresh(); });
+  }
+  function syncMove() {
+    var el = $('moveline'), cur = plan && plan.flat[plan.idx];
+    if (cur) {
+      showArrow(cur.tok); if (!busy) aimCamera(cur.tok);
+      el.innerHTML = '<span class="tok">' + cur.tok + '</span><div><div class="n">' + (mode === 'follow' ? 'DO THIS ON YOUR CUBE' : 'NEXT MOVE') + ' · ' + (plan.idx + 1) + ' OF ' + plan.flat.length + '</div><div class="w">' + words(cur.tok) + '</div></div>';
+    } else {
+      showArrow(null);
+      var st = stageOf(state);
+      el.innerHTML = '<div class="w" style="font-weight:500;color:var(--mute)">' + (stash ? 'Algorithm finished.' : st === 8 ? 'Solved. Scramble to go again.' : 'Tap "Show me this step" or press play.') + '</div>';
+    }
+    $('bDone').disabled = !cur && (stash || stageOf(state) === 8);
+  }
+
+  /* ---------- UI render ---------- */
+  function refresh() { hud(); renderSteps(); renderCoach(); syncPainter(); syncMove(); save(); }
+  function hud() {
+    var st = stageOf(state);
+    if (stash) { $('hud').innerHTML = 'ALGORITHM<br><b>' + (plan ? plan.segs[0].title.toUpperCase() : 'DONE') + '</b>'; return; }
+    $('hud').innerHTML = st === 8 ? 'STATUS <b>SOLVED</b>' : 'STEP <b>' + st + ' / 7</b><br>' + STAGES[st].name.toUpperCase() + (plan ? '<br>MOVE <b>' + plan.idx + ' / ' + plan.flat.length + '</b>' : '');
+  }
+  function renderSteps() {
+    var st = stash ? stageOf(stash.state) : stageOf(state), h = '';
+    for (var i = 1; i <= 7; i++) {
+      var cls = i < st ? 'done' : i === st ? 'now' : '';
+      h += '<div class="chip ' + cls + '"><b>' + (i < st ? 'DONE' : i === st ? 'NOW' : 'STEP ' + i) + '</b>' + STAGES[i].short + '</div>';
+    }
+    h += '<div class="chip ' + (st === 8 ? 'done' : '') + '"><b>' + (st === 8 ? 'DONE' : 'GOAL') + '</b>Solved</div>';
+    $('steps').innerHTML = h;
+  }
+  function topView(s) {
+    var g = [], c = function (i) { return COLORS[scheme[s[i]]]; }, r, k;
+    for (k = 0; k < 25; k++) g.push('<i class="x"></i>');
+    for (r = 0; r < 3; r++) for (k = 0; k < 3; k++) g[(r + 1) * 5 + k + 1] = '<i style="--c:' + c(r * 3 + k) + '"></i>';
+    for (k = 0; k < 3; k++) {
+      g[k + 1] = '<i class="s" style="--c:' + c(45 + 2 - k) + '"></i>';
+      g[20 + k + 1] = '<i class="s" style="--c:' + c(18 + k) + '"></i>';
+      g[(k + 1) * 5] = '<i class="sv" style="--c:' + c(36 + k) + '"></i>';
+      g[(k + 1) * 5 + 4] = '<i class="sv" style="--c:' + c(9 + 2 - k) + '"></i>';
+    }
+    return '<div class="topview" aria-label="Top layer seen from above, front at the bottom">' + g.join('') + '</div>';
+  }
+  function mini(on) { var h = ''; for (var i = 0; i < 9; i++) h += '<i' + (i === 4 || on.indexOf(i) >= 0 ? ' class="y"' : '') + '></i>'; return '<div class="mini">' + h + '</div>'; }
+  function crossPattern(s) {
+    var u = [1, 3, 5, 7].filter(function (i) { return s[i] === 0; });
+    if (u.length === 4) return 'cross'; if (!u.length) return 'dot';
+    return (u.indexOf(3) >= 0 && u.indexOf(5) >= 0) || (u.indexOf(1) >= 0 && u.indexOf(7) >= 0) ? 'line' : 'L';
+  }
+  function patternBlock(st) {
+    var h = '<div class="tvwrap"><div>' + topView(state) + '<div class="lbl">YOUR TOP (FRONT ↓)</div></div>';
+    if (st === 4) {
+      var p = crossPattern(state), defs = [['dot', 'Dot', []], ['L', 'L', [1, 3]], ['line', 'Line', [3, 5]], ['cross', 'Plus', [1, 3, 5, 7]]];
+      h += '<div class="pats">' + defs.map(function (d) { return '<div class="pat' + (d[0] === p ? ' on' : '') + '">' + mini(d[2]) + d[1] + '</div>'; }).join('') + '</div>';
+      h += '</div><p class="tip">You have: <b>' + (p === 'L' ? 'an L' : p === 'line' ? 'a line' : p === 'dot' ? 'a dot' : 'a plus') + '</b>. The pictures show the right way to hold each one.</p>';
+    } else if (st === 5) {
+      var up = [0, 2, 6, 8].filter(function (i) { return state[i] === 0; }).length;
+      h += '</div><p class="tip">You have <b>' + up + ' ' + nm()[0] + ' corner' + (up === 1 ? '' : 's') + ' facing up</b>. ' + (up === 1 ? 'That is the fish: put it at front left.' : 'Find the front-left corner with ' + nm()[0] + ' on its left side.') + '</p>';
+    } else h += '</div>';
+    return h;
+  }
+  function renderCoach() {
+    var el = $('coach');
+    if (stash) {
+      el.innerHTML = '<div class="banner"><h3>Watching an algorithm</h3><p class="sub">Your own cube is saved. Go back to it any time.</p><div class="row"><button class="pri" id="cRestore">Back to my cube</button><button id="cAgain">Watch again</button></div></div>';
+      $('cRestore').onclick = restoreStash; $('cAgain').onclick = function () { watchAlg(stash.alg); };
+      return;
+    }
+    var st = stageOf(state), pr = progress(state);
+    if (st === 8) { el.innerHTML = '<h3 class="ok">Solved</h3><p>Every face is one color. Scramble it from "My cube" or time a solve in Practice.</p>'; return; }
+    var s = STAGES[st], h = '<h2>Your next move</h2><h3>Step ' + st + ': ' + s.name + '</h3>';
+    if (st > 1) h += '<p class="sub">Your ' + nm()[3] + ' cross is done. ' + (pr[st] ? pr[st][0] + ' of ' + pr[st][1] + ' pieces in place for this step.' : '') + '</p>';
+    else h += '<p class="sub">The cross is not finished yet. ' + pr[1][0] + ' of 4 edges are in place.</p>';
+    h += '<p>' + fill(s.body) + '</p>';
+    if (st >= 4) h += patternBlock(st);
+    if (s.alg) h += '<div class="alg">' + s.alg.replace(/ /g, '&nbsp;').replace(/\n/g, '<br>') + '</div>';
+    h += '<p class="tip">' + (s.tip.indexOf('<b>') === 0 ? '' : '<b>Tip</b> ') + fill(s.tip).replace(/\. <b>/g, '.<br><b>') + '</p>';
+    if (st === 2) h += '<div class="seg2" role="group" aria-label="Corner method"><button id="cmBeg" aria-pressed="' + !shortC + '">Repeat one algorithm</button><button id="cmShort" aria-pressed="' + shortC + '">Shortest moves</button></div>';
+    h += '<div class="row"><button class="pri" id="cGuide">' + (plan ? 'Restart this step' : 'Show me this step') + '</button><label class="chk"><input type="checkbox" id="cSpot"' + (spotlight ? ' checked' : '') + '> Spotlight pieces</label></div>';
+    h += '<div class="seglist" id="seglist"></div>';
+    el.innerHTML = h;
+    $('cGuide').onclick = function () { if (busy) return; stopAll(); ensurePlan(); hud(); };
+    $('cSpot').onchange = function (e) { spotlight = e.target.checked; paint(); save(); };
+    if (st === 2) {
+      var setM = function (v) { if (busy) return; shortC = v; var had = !!plan; stopAll(); if (had) ensurePlan(); renderCoach(); syncMove(); save(); };
+      $('cmBeg').onclick = function () { setM(false); }; $('cmShort').onclick = function () { setM(true); };
+    }
+    updateList();
+  }
+  function updateList() {
+    var el = $('seglist'); if (!el) return;
+    if (!plan) { el.style.display = 'none'; return; }
+    el.style.display = '';
+    var cur = plan.flat[plan.idx], curSi = cur ? cur.si : -1, h = '', gi = 0;
+    plan.segs.forEach(function (g, si) {
+      var cls = si === curSi ? 'cur' : (si < curSi || curSi < 0) ? 'done' : '';
+      h += '<div class="seg ' + cls + '"><div class="t">' + (si + 1) + '. ' + g.title + '</div><div class="x">' + g.text + '</div><div class="mv">';
+      g.moves.forEach(function (m) { h += '<i class="' + (gi === plan.idx ? 'on' : gi < plan.idx ? 'past' : '') + '">' + m + '</i>'; gi++; });
+      h += '</div></div>';
+    });
+    el.innerHTML = h;
+    var c = el.querySelector('.cur'); if (c) el.scrollTop = c.offsetTop - el.offsetTop - 6;
+  }
+  var toastT;
+  function toast(t) { var e = $('toast'); e.textContent = t; e.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(function () { e.classList.remove('show'); }, 2600); }
+
+  /* ---------- watch an algorithm ---------- */
+  function watchAlg(a) {
+    if (busy) return;
+    if (!stash) stash = { state: state, scheme: scheme.slice() };
+    stash.alg = a; stopAll(); spin = false;
+    var mv = parseAlg(a.alg);
+    state = applyAlg(solvedState(), invAlg(mv)); paint();
+    plan = makePlan([{ title: a.name, text: 'Watch the pieces move. The cube ends solved.', moves: mv, focus: null }], { custom: true });
+    refresh(); window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (mode === 'watch') { playing = true; setPlayIcon(); setTimeout(playLoop, 500); }
+  }
+  function restoreStash() {
+    if (busy || !stash) return;
+    stopAll(); state = stash.state; scheme = stash.scheme; stash = null; paint(); refresh();
+  }
+
+  /* ---------- painter ---------- */
+  var paintArr = new Array(54).fill(0), sel = 1, painterDirty = false;
+  var OFF = [[3, 0], [6, 3], [3, 3], [3, 6], [0, 3], [9, 3]];
+  function syncPainter() { if (painterDirty) return; var st = stash ? stash.state : state, sc = stash ? stash.scheme : scheme; for (var i = 0; i < 54; i++) paintArr[i] = sc[st[i]]; renderNet(); }
+  function renderNet() {
+    var grid = new Array(108), h = '', i;
+    for (var f = 0; f < 6; f++) for (var r = 0; r < 3; r++) for (var c = 0; c < 3; c++) grid[(OFF[f][1] + r) * 12 + OFF[f][0] + c] = f * 9 + r * 3 + c;
+    for (i = 0; i < 108; i++) {
+      var k = grid[i];
+      h += k === undefined ? '<div class="e"></div>' : '<button class="c" data-i="' + k + '" aria-label="sticker ' + SIDE[Math.floor(k / 9)] + ' ' + (k % 9 + 1) + '" style="background:' + COLORS[paintArr[k]] + '">' + (k % 9 === 4 ? SIDE[Math.floor(k / 9)] : '') + '</button>';
+    }
+    $('net').innerHTML = h;
+    var cnt = [0, 0, 0, 0, 0, 0, 0]; paintArr.forEach(function (c) { cnt[c]++; });
+    var p = '';
+    for (i = 0; i < 7; i++) p += '<button class="sw' + (sel === i ? ' sel' : '') + '" data-c="' + i + '" style="background:' + COLORS[i] + '" aria-label="' + CNAMES[i] + '"><small class="' + (i < 6 && cnt[i] !== 9 ? 'bad' : '') + '">' + (i < 6 ? cnt[i] + '/9' : cnt[6]) + '</small></button>';
+    $('pal').innerHTML = p;
+  }
+  function applyPainted() {
+    var msg = $('msg'); msg.className = 'msg';
+    var cen = [], i, seen = {};
+    for (i = 0; i < 6; i++) cen.push(paintArr[i * 9 + 4]);
+    for (i = 0; i < 6; i++) { if (cen[i] === 6 || seen[cen[i]]) { msg.className = 'msg err'; msg.textContent = 'The six center stickers must be six different colors.'; return; } seen[cen[i]] = 1; }
+    var toLabel = {}; cen.forEach(function (c, l) { toLabel[c] = l; });
+    var ns = new Uint8Array(54);
+    for (i = 0; i < 54; i++) { if (paintArr[i] === 6) { msg.className = 'msg err'; msg.textContent = 'Some stickers are still blank.'; return; } ns[i] = toLabel[paintArr[i]]; }
+    var sc = cen.slice();
+    if ($('whiteTop').checked) { var fz = flipZ(ns, sc); ns = fz[0]; sc = fz[1]; }
+    var err = validate(ns);
+    if (err) { msg.className = 'msg err'; msg.textContent = err + ' Compare each face with your cube.'; return; }
+    if (busy) return;
+    stash = null; stopAll(); state = ns; scheme = sc; painterDirty = false; paint();
+    $('whiteTop').checked = false; spin = false;
+    msg.textContent = 'Cube loaded.'; refresh(); ensurePlan(); hud(); window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+  function setCube(s) { if (busy) return; stash = null; stopAll(); state = s; scheme = DEF_SCHEME.slice(); painterDirty = false; paint(); $('msg').textContent = ''; refresh(); }
+
+  /* ---------- photo scan ---------- */
+  var SCAN = [
+    { f: 2, name: 'Front', txt: 'Pick any side as the front. White center on the bottom.' },
+    { f: 1, name: 'Right', txt: 'Turn the whole cube a quarter to the left so the right side faces you.' },
+    { f: 5, name: 'Back', txt: 'Turn the whole cube left again.' },
+    { f: 4, name: 'Left', txt: 'Turn it left once more.' },
+    { f: 0, name: 'Top', txt: 'Turn left to return to your front. Tip the top toward you. The front edge goes at the bottom of the photo.' },
+    { f: 3, name: 'Bottom', txt: 'From your front, tip the bottom toward you. The front edge goes at the top of the photo.' }
+  ];
+  var CV = 140;
+  SCAN.forEach(function (s) { s.img = null; s.zoom = 0.8; s.rot = 0; s.px = 0; s.py = 0; s.rgb = null; });
+  function buildScan() {
+    $('scanList').innerHTML = SCAN.map(function (s, i) {
+      return '<div class="scanrow" id="sr' + i + '"><canvas width="' + CV + '" height="' + CV + '" id="sc' + i + '" aria-label="' + s.name + ' photo preview"></canvas><div class="info"><b>' + (i + 1) + '. ' + s.name.toUpperCase() + '</b><p>' + s.txt + '</p>' +
+        '<div class="row"><label class="btn">Photo<input type="file" accept="image/*" capture="environment" id="si' + i + '"></label><button id="sr' + i + 'r" aria-label="Rotate ' + s.name + ' photo">Rotate</button></div>' +
+        '<label class="chk" style="font-size:13px">Zoom <input type="range" min="0.3" max="1" step="0.02" value="' + s.zoom + '" id="sz' + i + '"></label></div></div>';
+    }).join('');
+    SCAN.forEach(function (s, i) {
+      $('si' + i).onchange = function (e) { var file = e.target.files && e.target.files[0]; if (file) loadImg(i, file); e.target.value = ''; };
+      $('sr' + i + 'r').onclick = function () { s.rot = (s.rot + 1) % 4; drawScan(i); };
+      $('sz' + i).oninput = function (e) { s.zoom = +e.target.value; drawScan(i); };
+      var cv = $('sc' + i), dr = null;
+      cv.addEventListener('pointerdown', function (e) { if (!s.img) return; dr = [e.clientX, e.clientY]; cv.setPointerCapture(e.pointerId); });
+      cv.addEventListener('pointermove', function (e) {
+        if (!dr) return;
+        var dx = e.clientX - dr[0], dy = e.clientY - dr[1]; dr = [e.clientX, e.clientY];
+        for (var k = 0; k < s.rot; k++) { var t = dx; dx = dy; dy = -t; }
+        var side = s.zoom * Math.min(s.img.width, s.img.height);
+        s.px -= dx / CV * side / s.img.width; s.py -= dy / CV * side / s.img.height;
+        drawScan(i);
+      });
+      ['pointerup', 'pointercancel'].forEach(function (n) { cv.addEventListener(n, function () { dr = null; }); });
+      drawScan(i);
+    });
+  }
+  function loadImg(i, file) {
+    var url = URL.createObjectURL(file), im = new Image();
+    im.onload = function () {
+      var k = Math.min(1, 800 / Math.max(im.width, im.height)), c = document.createElement('canvas');
+      c.width = Math.round(im.width * k); c.height = Math.round(im.height * k);
+      c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      var s = SCAN[i]; s.img = c; s.px = 0; s.py = 0; s.rot = 0; drawScan(i);
+    };
+    im.onerror = function () { URL.revokeObjectURL(url); $('scanMsg').className = 'msg err'; $('scanMsg').textContent = 'That photo could not be opened. Try a JPG or PNG.'; };
+    im.src = url;
+  }
+  function drawScan(i) {
+    var s = SCAN[i], cv = $('sc' + i), ctx = cv.getContext('2d');
+    ctx.clearRect(0, 0, CV, CV); ctx.fillStyle = '#06090f'; ctx.fillRect(0, 0, CV, CV);
+    var row = $('sr' + i);
+    if (!s.img) {
+      ctx.fillStyle = '#7f93b2'; ctx.font = '13px Rajdhani,sans-serif'; ctx.textAlign = 'center'; ctx.fillText('No photo yet', CV / 2, CV / 2 + 4);
+      s.rgb = null; row.classList.remove('ok'); return;
+    }
+    var w = s.img.width, h = s.img.height, side = s.zoom * Math.min(w, h);
+    var maxX = (w - side) / 2 / w, maxY = (h - side) / 2 / h;
+    s.px = Math.max(-maxX, Math.min(maxX, s.px)); s.py = Math.max(-maxY, Math.min(maxY, s.py));
+    var cx = w / 2 + s.px * w, cy = h / 2 + s.py * h;
+    ctx.save(); ctx.translate(CV / 2, CV / 2); ctx.rotate(s.rot * Math.PI / 2);
+    ctx.drawImage(s.img, cx - side / 2, cy - side / 2, side, side, -CV / 2, -CV / 2, CV, CV); ctx.restore();
+    var d = ctx.getImageData(0, 0, CV, CV).data, cell = CV / 3, rad = Math.round(cell * 0.18);
+    s.rgb = [];
+    for (var r = 0; r < 3; r++) for (var c = 0; c < 3; c++) {
+      var x0 = Math.round((c + .5) * cell), y0 = Math.round((r + .5) * cell), sum = [0, 0, 0], n = 0;
+      for (var y = y0 - rad; y <= y0 + rad; y++) for (var x = x0 - rad; x <= x0 + rad; x++) { var o = (y * CV + x) * 4; sum[0] += d[o]; sum[1] += d[o + 1]; sum[2] += d[o + 2]; n++; }
+      s.rgb.push([sum[0] / n, sum[1] / n, sum[2] / n]);
+    }
+    ctx.strokeStyle = '#35e0ffcc'; ctx.lineWidth = 1.5;
+    for (var g = 1; g < 3; g++) { ctx.beginPath(); ctx.moveTo(g * cell, 0); ctx.lineTo(g * cell, CV); ctx.moveTo(0, g * cell); ctx.lineTo(CV, g * cell); ctx.stroke(); }
+    ctx.strokeRect(1, 1, CV - 2, CV - 2);
+    s.rgb.forEach(function (p, k) {
+      var x = ((k % 3) + .5) * cell, y = (Math.floor(k / 3) + .5) * cell;
+      ctx.beginPath(); ctx.arc(x, y, 7, 0, 7); ctx.fillStyle = 'rgb(' + p.map(Math.round).join(',') + ')'; ctx.fill(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
+    });
+    row.classList.add('ok');
+  }
+  function toLab(p) {
+    var v = p.map(function (x) { x /= 255; return x > 0.04045 ? Math.pow((x + 0.055) / 1.055, 2.4) : x / 12.92; });
+    var X = (v[0] * 0.4124 + v[1] * 0.3576 + v[2] * 0.1805) / 0.95047, Y = v[0] * 0.2126 + v[1] * 0.7152 + v[2] * 0.0722, Z = (v[0] * 0.0193 + v[1] * 0.1192 + v[2] * 0.9505) / 1.08883;
+    var f = function (t) { return t > 0.008856 ? Math.cbrt(t) : 7.787 * t + 16 / 116; };
+    return [116 * f(Y) - 16, 500 * (f(X) - f(Y)), 200 * (f(Y) - f(Z))];
+  }
+  function dist(a, b, wl) { var l = a[0] - b[0]; return wl * l * l + (a[1] - b[1]) * (a[1] - b[1]) + (a[2] - b[2]) * (a[2] - b[2]); }
+  var CANON = [[235, 235, 235], [240, 215, 30], [10, 165, 75], [15, 75, 195], [195, 20, 40], [250, 115, 15]].map(toLab);
+  function readColors() {
+    var m = $('scanMsg'); m.className = 'msg';
+    var missing = SCAN.filter(function (s) { return !s.rgb; }).map(function (s) { return s.name; });
+    if (missing.length) { m.className = 'msg err'; m.textContent = 'Add a photo for: ' + missing.join(', ') + '.'; return; }
+    var faces = []; SCAN.forEach(function (s) { faces[s.f] = s.rgb; });
+    var r = classify(faces);
+    for (var q = 0; q < 54; q++) paintArr[q] = r.paint[q];
+    painterDirty = true; showTab('paint'); renderNet();
+    $('msg').className = r.ok ? 'msg' : 'msg err';
+    $('msg').textContent = r.ok ? 'Colors read. Check each sticker against your cube, fix any that are off, then tap Use this cube.' : 'Colors read, but something looks off: ' + r.err + ' Fix the stickers that differ from your cube, then tap Use this cube.';
+  }
+  function rotFace(a, f) { var o = a.slice(); for (var r = 0; r < 3; r++) for (var c = 0; c < 3; c++) o[f * 9 + r * 3 + c] = a[f * 9 + (2 - c) * 3 + r]; return o; }
+  function classify(faces) {
+    var lab = new Array(54);
+    faces.forEach(function (rgb, f) { rgb.forEach(function (p, k) { lab[f * 9 + k] = toLab(p); }); });
+    var refs = [0, 1, 2, 3, 4, 5].map(function (f) { return lab[f * 9 + 4]; }), lbl;
+    for (var it = 0; it < 4; it++) {
+      lbl = new Array(54).fill(-1); var cnt = [1, 1, 1, 1, 1, 1], pairs = [], i, f;
+      for (f = 0; f < 6; f++) lbl[f * 9 + 4] = f;
+      for (i = 0; i < 54; i++) if (i % 9 !== 4) for (f = 0; f < 6; f++) pairs.push([dist(lab[i], refs[f], 0.35), i, f]);
+      pairs.sort(function (a, b) { return a[0] - b[0]; });
+      pairs.forEach(function (p) { if (lbl[p[1]] < 0 && cnt[p[2]] < 9) { lbl[p[1]] = p[2]; cnt[p[2]]++; } });
+      refs = refs.map(function (r, f2) {
+        var sum = [0, 0, 0], n = 0;
+        for (var j = 0; j < 54; j++) if (lbl[j] === f2) { sum[0] += lab[j][0]; sum[1] += lab[j][1]; sum[2] += lab[j][2]; n++; }
+        return [sum[0] / n, sum[1] / n, sum[2] / n];
+      });
+    }
+    var best = null, bestD = 1e18;
+    (function perm(arr, used) {
+      if (arr.length === 6) { var t = 0; for (var k = 0; k < 6; k++) t += dist(refs[k], CANON[arr[k]], 1); if (t < bestD) { bestD = t; best = arr.slice(); } return; }
+      for (var c = 0; c < 6; c++) if (!used[c]) { used[c] = 1; arr.push(c); perm(arr, used); arr.pop(); used[c] = 0; }
+    })([], []);
+    var found = null;
+    for (var a = 0; a < 4 && !found; a++) for (var b = 0; b < 4 && !found; b++) {
+      var L = lbl.slice(), k2;
+      for (k2 = 0; k2 < a; k2++) L = rotFace(L, 0);
+      for (k2 = 0; k2 < b; k2++) L = rotFace(L, 3);
+      if (!validate(new Uint8Array(L))) found = L;
+    }
+    var use = found || lbl;
+    return { paint: use.map(function (x) { return best[x]; }), lbl: use, ok: !!found, err: found ? null : validate(new Uint8Array(lbl)), scheme: best };
+  }
+  function showTab(t) {
+    $('tScan').classList.toggle('on', t === 'scan'); $('tPaint').classList.toggle('on', t === 'paint');
+    $('pScan').hidden = t !== 'scan'; $('pPaint').hidden = t !== 'paint';
+  }
+
+  /* ---------- live camera scanner ---------- */
+  var LIVE_URL = 'https://melo21.github.io/cube-coach/';
+  var live = { stream: null, faces: [], raf: 0, prev: null, stable: 0, armed: true, frame: 0, cur: null, hint: '' };
+  var STABLE_N = 14, CVL = 360, G0 = 54, GS = 252;
+  var LIVE_TXT = ['Hold any side facing you, white center on the bottom.'].concat(SCAN.slice(1).map(function (s) { return s.txt; }));
+  var LIVE_LBL = [['TOP OF CUBE', 'WHITE CENTER DOWN'], ['TOP OF CUBE', ''], ['TOP OF CUBE', ''], ['TOP OF CUBE', ''], ['', 'FRONT EDGE'], ['FRONT EDGE', '']];
+  function flipZ(ns, sc) {
+    var RL = [3, 4, 2, 0, 1, 5], rs = new Uint8Array(54), nsc = [], i;
+    for (i = 0; i < 54; i++) { var s = ST[i]; rs[stIndex([-s.pos[0], -s.pos[1], s.pos[2]], [-s.n[0], -s.n[1], s.n[2]])] = RL[ns[i]]; }
+    for (i = 0; i < 6; i++) nsc[RL[i]] = sc[i];
+    return [rs, nsc];
+  }
+  function openLive() {
+    $('liveErr').hidden = true;
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { camFail('unsupported'); return; }
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false })
+      .then(function (st) {
+        live.stream = st; live.faces = []; live.stable = 0; live.prev = null; live.armed = true; live.cur = null;
+        var v = $('vid'); v.srcObject = st; var pp = v.play(); if (pp && pp.catch) pp.catch(function () {});
+        $('scanner').hidden = false; document.body.style.overflow = 'hidden'; $('scMsg').textContent = '';
+        renderLive(); loopLive();
+      }).catch(function (e) { camFail(e && e.name); });
+  }
+  function camFail(name) {
+    var err = $('liveErr'), here = location.hostname.indexOf('github.io') >= 0 || location.hostname === 'localhost' || location.protocol === 'file:';
+    err.hidden = false;
+    if (!here) err.innerHTML = 'The camera is blocked inside Claude. Open the live version in your phone browser: <a href="' + LIVE_URL + '">' + LIVE_URL + '</a>. The photo scan under My cube also works here.';
+    else if (name === 'NotAllowedError') err.textContent = 'Camera access was denied. Allow the camera for this site in your browser settings, then tap the button again.';
+    else err.textContent = 'The camera could not start (' + (name || 'unknown error') + '). Use the photo scan under My cube instead.';
+  }
+  function closeLive() {
+    if (live.stream) live.stream.getTracks().forEach(function (t) { t.stop(); });
+    live.stream = null; cancelAnimationFrame(live.raf);
+    $('scanner').hidden = true; document.body.style.overflow = '';
+  }
+  function loopLive() {
+    var v = $('vid'), ctx = $('scCv').getContext('2d', { willReadFrequently: true });
+    (function tick() {
+      if (!live.stream) return;
+      live.raf = requestAnimationFrame(tick);
+      if (v.readyState < 2 || !v.videoWidth) return;
+      var vw = v.videoWidth, vh = v.videoHeight, side = Math.min(vw, vh);
+      ctx.drawImage(v, (vw - side) / 2, (vh - side) / 2, side, side, 0, 0, CVL, CVL);
+      if (++live.frame % 3 === 0) sampleLive(ctx);
+      drawLive(ctx);
+    })();
+  }
+  function sampleLive(ctx) {
+    var d = ctx.getImageData(G0, G0, GS, GS).data, cell = GS / 3, rad = 13, rgb = [];
+    for (var r = 0; r < 3; r++) for (var c = 0; c < 3; c++) {
+      var x0 = Math.round((c + .5) * cell), y0 = Math.round((r + .5) * cell), sum = [0, 0, 0], n = 0;
+      for (var y = y0 - rad; y <= y0 + rad; y += 2) for (var x = x0 - rad; x <= x0 + rad; x += 2) { var o = (y * GS + x) * 4; sum[0] += d[o]; sum[1] += d[o + 1]; sum[2] += d[o + 2]; n++; }
+      rgb.push([sum[0] / n, sum[1] / n, sum[2] / n]);
+    }
+    var lab = rgb.map(toLab), moving = 99;
+    if (live.prev) { moving = 0; for (var k = 0; k < 9; k++) moving = Math.max(moving, Math.sqrt(dist(lab[k], live.prev[k], 1))); }
+    live.prev = lab; live.cur = rgb;
+    var looks = lab.filter(function (L) { return (Math.hypot(L[1], L[2]) > 18 && L[0] > 18) || L[0] > 55; }).length >= 8;
+    var dup = live.faces.some(function (f) { return Math.sqrt(dist(toLab(f[4]), lab[4], 1)) < 10; });
+    var hint = '';
+    if (moving > 9) { live.stable = 0; live.armed = true; }
+    else if (!looks) { live.stable = 0; hint = 'Fill the grid with one face of the cube.'; }
+    else if (dup) { live.stable = 0; hint = 'That face is already scanned. Turn the cube as shown above.'; }
+    else if (live.armed) { live.stable++; hint = 'Hold still...'; if (live.stable >= STABLE_N) captureLive(rgb); }
+    if (hint !== live.hint) { live.hint = hint; $('scMsg').textContent = hint; }
+  }
+  function drawLive(ctx) {
+    ctx.fillStyle = 'rgba(3,5,10,.6)';
+    ctx.fillRect(0, 0, CVL, G0); ctx.fillRect(0, G0 + GS, CVL, CVL - G0 - GS); ctx.fillRect(0, G0, G0, GS); ctx.fillRect(G0 + GS, G0, CVL - G0 - GS, GS);
+    var cell = GS / 3, prog = Math.min(1, live.stable / STABLE_N), g;
+    ctx.strokeStyle = 'rgba(53,224,255,.85)'; ctx.lineWidth = 2;
+    for (g = 1; g < 3; g++) { ctx.beginPath(); ctx.moveTo(G0 + g * cell, G0); ctx.lineTo(G0 + g * cell, G0 + GS); ctx.moveTo(G0, G0 + g * cell); ctx.lineTo(G0 + GS, G0 + g * cell); ctx.stroke(); }
+    ctx.lineWidth = 3; ctx.strokeRect(G0, G0, GS, GS);
+    if (prog > 0) { ctx.strokeStyle = '#ff3df0'; ctx.lineWidth = 6; ctx.beginPath(); var per = GS * 4 * prog, pts = [[G0, G0], [G0 + GS, G0], [G0 + GS, G0 + GS], [G0, G0 + GS], [G0, G0]]; ctx.moveTo(G0, G0);
+      for (g = 1; g < 5 && per > 0; g++) { var seg = Math.min(per, GS), a = pts[g - 1], b = pts[g]; ctx.lineTo(a[0] + (b[0] - a[0]) * seg / GS, a[1] + (b[1] - a[1]) * seg / GS); per -= seg; } ctx.stroke(); }
+    if (live.cur) live.cur.forEach(function (p, k) {
+      var x = G0 + ((k % 3) + .5) * cell, y = G0 + (Math.floor(k / 3) + .5) * cell;
+      ctx.beginPath(); ctx.arc(x, y, 11, 0, 7); ctx.fillStyle = 'rgb(' + p.map(Math.round).join(',') + ')'; ctx.fill(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 2.5; ctx.stroke();
+    });
+    var n = live.faces.length, lb = LIVE_LBL[Math.min(n, 5)];
+    ctx.fillStyle = '#35e0ff'; ctx.font = '600 15px Rajdhani,sans-serif'; ctx.textAlign = 'center';
+    if (lb[0]) ctx.fillText('▲ ' + lb[0], CVL / 2, G0 - 14);
+    if (lb[1]) ctx.fillText('▼ ' + lb[1], CVL / 2, G0 + GS + 26);
+  }
+  function captureLive(rgb) {
+    if (!rgb || live.faces.length >= 6) return;
+    live.faces.push(rgb); live.stable = 0; live.armed = false;
+    var f = $('scFlash'); f.classList.add('on'); setTimeout(function () { f.classList.remove('on'); }, 60);
+    try { if (navigator.vibrate) navigator.vibrate(60); } catch (e) { /* no vibration */ }
+    if (live.faces.length === 6) finishLive(); else renderLive();
+  }
+  function renderLive() {
+    var n = live.faces.length;
+    $('scStep').textContent = 'FACE ' + (n + 1) + ' / 6 · ' + SCAN[n].name.toUpperCase();
+    $('scTxt').textContent = LIVE_TXT[n];
+    $('scThumbs').innerHTML = SCAN.map(function (s, i) {
+      var g = live.faces[i] ? live.faces[i].map(function (p) { return '<i style="background:rgb(' + p.map(Math.round).join(',') + ')"></i>'; }).join('') : '';
+      return '<div class="th' + (i === n ? ' now' : '') + '"><div class="g">' + g + '</div>' + s.name + '</div>';
+    }).join('');
+    $('scBack').disabled = !n;
+  }
+  function finishLive() {
+    var fl = []; SCAN.forEach(function (s, i) { fl[s.f] = live.faces[i]; });
+    var r = classify(fl);
+    closeLive();
+    if (r.ok) {
+      var ns = new Uint8Array(r.lbl), sc = r.scheme.slice();
+      if (sc[0] === 0) { var fz = flipZ(ns, sc); ns = fz[0]; sc = fz[1]; }
+      stash = null; stopAll(); state = ns; scheme = sc; painterDirty = false; spin = false; paint(); refresh(); ensurePlan(); hud();
+      var st = stageOf(state);
+      toast(st === 8 ? 'Cube set. It is already solved!' : 'Cube set. You are on step ' + st + ': ' + STAGES[st].name);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else {
+      for (var q = 0; q < 54; q++) paintArr[q] = r.paint[q];
+      painterDirty = true; $('mine').open = true; showTab('paint'); renderNet();
+      $('msg').className = 'msg err';
+      $('msg').textContent = 'Almost there. Something did not read cleanly: ' + r.err + ' Fix the stickers that differ from your cube, then tap Use this cube.';
+      $('mineCard').scrollIntoView({ behavior: 'smooth' });
+    }
+  }
+  $('liveBtn').onclick = openLive;
+  $('scClose').onclick = closeLive;
+  $('scSnap').onclick = function () { captureLive(live.cur); };
+  $('scBack').onclick = function () { if (live.faces.length) { live.faces.pop(); live.armed = true; live.stable = 0; renderLive(); } };
+
+  /* ---------- practice ---------- */
+  function renderAlgs() {
+    $('pAlg').innerHTML = ALGS.map(function (a, i) {
+      return '<div class="algrow"><div><div class="nm">' + a.name + '</div><div class="st">STEP ' + a.step + '</div></div><button data-w="' + i + '">Watch</button><code>' + a.alg + '</code></div>';
+    }).join('');
+  }
+  $('pAlg').onclick = function (e) { var b = e.target.closest('button'); if (b) watchAlg(ALGS[+b.dataset.w]); };
+  var quizCur = null, revealed = false;
+  function pickQuiz() {
+    var w = ALGS.map(function (a) { var q = stats.quiz[a.id] || [0, 0]; return 1 + (q[1] - q[0]) * 2 + (q[1] === 0 ? 2 : 0); });
+    var tot = w.reduce(function (a, b) { return a + Math.max(1, b); }, 0), r = Math.random() * tot;
+    for (var i = 0; i < ALGS.length; i++) { r -= Math.max(1, w[i]); if (r <= 0 && ALGS[i] !== quizCur) return ALGS[i]; }
+    return ALGS[(ALGS.indexOf(quizCur) + 1) % ALGS.length];
+  }
+  function renderQuiz() {
+    if (!quizCur) quizCur = pickQuiz();
+    var q = stats.quiz[quizCur.id] || [0, 0], h = '<div class="quiz"><div class="st sub">STEP ' + quizCur.step + ' · ' + STAGES[quizCur.step].name.toUpperCase() + '</div><div class="q">' + quizCur.name + '</div>';
+    h += '<p class="sub">Say the moves out loud, or do them on your cube, then reveal.</p><div class="a">' + (revealed ? quizCur.alg : '? ? ?') + '</div>';
+    h += revealed ? '<div class="row" style="justify-content:center"><button class="pri" id="qGot">I knew it</button><button id="qMiss">I missed it</button></div>' : '<div class="row" style="justify-content:center"><button class="pri" id="qShow">Reveal</button></div>';
+    h += '</div><div class="sub">' + ALGS.map(function (a) { var s = stats.quiz[a.id] || [0, 0]; return a.name + ': ' + s[0] + '/' + s[1]; }).join(' · ') + '</div>';
+    $('pQuiz').innerHTML = h;
+    if (revealed) { $('qGot').onclick = function () { mark(true); }; $('qMiss').onclick = function () { mark(false); }; }
+    else $('qShow').onclick = function () { revealed = true; renderQuiz(); };
+  }
+  function mark(ok) { var q = stats.quiz[quizCur.id] || [0, 0]; if (ok) q[0]++; q[1]++; stats.quiz[quizCur.id] = q; save(); quizCur = pickQuiz(); revealed = false; renderQuiz(); }
+  var tRun = false, tStart = 0;
+  function renderTimerOpts() { $('tTarget').innerHTML = '<option value="solve">Full solve</option>' + ALGS.map(function (a) { return '<option value="' + a.id + '">' + a.name + '</option>'; }).join(''); }
+  function fmt(ms) { var s = ms / 1000; return s >= 60 ? Math.floor(s / 60) + ':' + ('0' + (s % 60).toFixed(2)).slice(-5) : s.toFixed(2); }
+  function timerStats() {
+    var t = stats.times[$('tTarget').value] || [];
+    if (!t.length) { $('tStats').textContent = 'No times yet. Tap the clock to start, tap again to stop.'; return; }
+    var best = Math.min.apply(null, t), last = t.slice(-5), avg = last.reduce(function (a, b) { return a + b; }, 0) / last.length;
+    $('tStats').textContent = 'Best ' + fmt(best) + ' · Average of last ' + last.length + ' ' + fmt(avg) + ' · Recent: ' + last.map(fmt).join(', ');
+  }
+  $('clock').onclick = function () {
+    var c = $('clock');
+    if (!tRun) { tRun = true; tStart = performance.now(); c.classList.add('run'); (function tick() { if (!tRun) return; c.textContent = fmt(performance.now() - tStart); requestAnimationFrame(tick); })(); }
+    else {
+      tRun = false; c.classList.remove('run'); var ms = performance.now() - tStart; c.textContent = fmt(ms);
+      var k = $('tTarget').value; (stats.times[k] = stats.times[k] || []).push(Math.round(ms)); if (stats.times[k].length > 50) stats.times[k].shift();
+      save(); timerStats();
+    }
+  };
+  $('tTarget').onchange = function () { $('clock').textContent = '0.00'; timerStats(); };
+  $('tClear').onclick = function () { stats.times[$('tTarget').value] = []; save(); timerStats(); };
+  function practiceTab(t) {
+    ['Alg', 'Quiz', 'Time'].forEach(function (n) { $('t' + n).classList.toggle('on', n === t); $('p' + n).hidden = n !== t; });
+    if (t === 'Quiz') renderQuiz(); if (t === 'Time') timerStats();
+  }
+  $('tAlg').onclick = function () { practiceTab('Alg'); }; $('tQuiz').onclick = function () { practiceTab('Quiz'); }; $('tTime').onclick = function () { practiceTab('Time'); };
+
+  /* ---------- modes ---------- */
+  function setMode(m) {
+    mode = m; playing = false; setPlayIcon();
+    $('mWatch').setAttribute('aria-pressed', m === 'watch'); $('mFollow').setAttribute('aria-pressed', m === 'follow');
+    $('bPlay').hidden = m === 'follow'; $('bNext').hidden = m === 'follow'; $('speedWrap').hidden = m === 'follow';
+    $('bDone').hidden = m !== 'follow';
+    document.querySelector('.viewer').classList.toggle('follow', m === 'follow');
+    if (m === 'follow') ensurePlan();
+    syncMove(); save();
+  }
+
+  /* ---------- wiring ---------- */
+  build(); applyView();
+  var drag = null;
+  stage.addEventListener('pointerdown', function (e) { drag = { x: e.clientX, y: e.clientY }; spin = false; cam = null; stage.setPointerCapture(e.pointerId); });
+  stage.addEventListener('pointermove', function (e) {
+    if (!drag) return;
+    ry += (e.clientX - drag.x) * 0.5; rx = Math.max(-89, Math.min(89, rx - (e.clientY - drag.y) * 0.5));
+    drag = { x: e.clientX, y: e.clientY }; applyView();
+  });
+  ['pointerup', 'pointercancel'].forEach(function (n) { stage.addEventListener(n, function () { drag = null; }); });
+  (function loop() {
+    if (spin) { ry += 0.25; applyView(); }
+    else if (cam) {
+      rx += (cam[0] - rx) * 0.12; ry += (cam[1] - ry) * 0.12;
+      if (Math.abs(cam[0] - rx) < 0.2 && Math.abs(cam[1] - ry) < 0.2) { rx = cam[0]; ry = cam[1]; cam = null; }
+      applyView();
+    }
+    requestAnimationFrame(loop);
+  })();
+  window.addEventListener('resize', layout);
+
+  $('bPlay').onclick = function () { spin = false; if (busy) return; playing = !playing; setPlayIcon(); if (playing) playLoop(); };
+  $('bNext').onclick = function () { spin = false; playing = false; setPlayIcon(); fwd(); };
+  $('bDone').onclick = function () { spin = false; fwd(); };
+  $('bBack').onclick = function () { back(); };
+  $('speed').value = speed;
+  $('speed').oninput = function (e) { speed = +e.target.value; save(); };
+  $('mWatch').onclick = function () { setMode('watch'); };
+  $('mFollow').onclick = function () { setMode('follow'); };
+  $('autoView').checked = autoView;
+  $('autoView').onchange = function (e) { autoView = e.target.checked; if (!autoView) cam = null; else if (plan && plan.flat[plan.idx]) aimCamera(plan.flat[plan.idx].tok); save(); };
+  $('bFlip').onclick = function () { spin = false; cam = [rx < 0 ? 26 : -26, ry]; };
+  $('moves').innerHTML = ['U', "U'", 'R', "R'", 'F', "F'", 'D', "D'", 'L', "L'", 'B', "B'"].map(function (m) { return '<button data-m="' + m + '">' + m + '</button>'; }).join('');
+  $('moves').onclick = function (e) { var m = e.target.dataset && e.target.dataset.m; if (m) userMove(m); };
+  $('net').onclick = function (e) { var b = e.target.closest('.c'); if (!b) return; paintArr[+b.dataset.i] = sel; painterDirty = true; renderNet(); };
+  $('pal').onclick = function (e) { var b = e.target.closest('.sw'); if (!b) return; sel = +b.dataset.c; renderNet(); };
+  $('apply').onclick = applyPainted;
+  $('blank').onclick = function () { for (var i = 0; i < 54; i++) if (i % 9 !== 4) paintArr[i] = 6; painterDirty = true; renderNet(); };
+  $('demo').onclick = function () { setCube(demoState()); };
+  $('scr').onclick = function () { setCube(randomState()); };
+  $('rst').onclick = function () { setCube(solvedState()); };
+  $('tScan').onclick = function () { showTab('scan'); };
+  $('tPaint').onclick = function () { showTab('paint'); };
+  $('readColors').onclick = readColors;
+  $('clearScan').onclick = function () { SCAN.forEach(function (s, i) { s.img = null; drawScan(i); }); $('scanMsg').textContent = ''; };
+
+  if (saved.state && saved.state.length === 54) {
+    var ss = new Uint8Array(saved.state);
+    if (!validate(ss)) { state = ss; if (saved.scheme && saved.scheme.length === 6) scheme = saved.scheme; }
+    else state = demoState();
+  } else state = demoState();
+  buildScan(); renderAlgs(); renderTimerOpts(); paint();
+  setMode(mode); refresh();
+  if (mode === 'watch') syncMove();
+})();
+
+</script>
+</body>
+</html>
