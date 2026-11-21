@@ -1053,6 +1053,9 @@ function demoState() { var s = randomState(); return applyAlg(s, solveCross(s));
     for (i = 0; i < 54; i++) { if (paintArr[i] === 6) { msg.className = 'msg err'; msg.textContent = 'Some stickers are still blank.'; return; } ns[i] = toLabel[paintArr[i]]; }
     var sc = cen.slice();
     if ($('whiteTop').checked) { var fz = flipZ(ns, sc); ns = fz[0]; sc = fz[1]; }
+    var cnt = [0, 0, 0, 0, 0, 0, 0]; paintArr.forEach(function (c) { cnt[c]++; });
+    var off = []; for (i = 0; i < 6; i++) if (cnt[i] !== 9) off.push(cnt[i] + ' ' + CNAMES[i]);
+    if (off.length) { msg.className = 'msg err'; msg.textContent = 'Each color needs exactly 9 stickers. Right now there are ' + off.join(', ') + '. The counts under the color dots turn orange when off.'; return; }
     var err = validate(ns);
     if (err) { msg.className = 'msg err'; msg.textContent = err + ' Compare each face with your cube.'; return; }
     if (busy) return;
@@ -1151,8 +1154,7 @@ function demoState() { var s = randomState(); return applyAlg(s, solveCross(s));
     var m = $('scanMsg'); m.className = 'msg';
     var missing = SCAN.filter(function (s) { return !s.rgb; }).map(function (s) { return s.name; });
     if (missing.length) { m.className = 'msg err'; m.textContent = 'Add a photo for: ' + missing.join(', ') + '.'; return; }
-    var faces = []; SCAN.forEach(function (s) { faces[s.f] = s.rgb; });
-    var r = classify(faces);
+    var r = classifyCaptured(SCAN.map(function (s) { return s.rgb; }));
     for (var q = 0; q < 54; q++) paintArr[q] = r.paint[q];
     painterDirty = true; showTab('paint'); renderNet();
     $('msg').className = r.ok ? 'msg' : 'msg err';
@@ -1180,15 +1182,58 @@ function demoState() { var s = randomState(); return applyAlg(s, solveCross(s));
       if (arr.length === 6) { var t = 0; for (var k = 0; k < 6; k++) t += dist(refs[k], CANON[arr[k]], 1); if (t < bestD) { bestD = t; best = arr.slice(); } return; }
       for (var c = 0; c < 6; c++) if (!used[c]) { used[c] = 1; arr.push(c); perm(arr, used); arr.pop(); used[c] = 0; }
     })([], []);
-    var found = null;
-    for (var a = 0; a < 4 && !found; a++) for (var b = 0; b < 4 && !found; b++) {
-      var L = lbl.slice(), k2;
-      for (k2 = 0; k2 < a; k2++) L = rotFace(L, 0);
-      for (k2 = 0; k2 < b; k2++) L = rotFace(L, 3);
-      if (!validate(new Uint8Array(L))) found = L;
+    var found = layoutSearch(lbl);
+    if (!found) {
+      // try swapping the least certain pairs of stickers (e.g. red vs orange in warm light)
+      var cand = [];
+      for (var i2 = 0; i2 < 54; i2++) if (i2 % 9 !== 4) for (var j2 = i2 + 1; j2 < 54; j2++) if (j2 % 9 !== 4 && lbl[i2] !== lbl[j2]) {
+        var A = lbl[i2], B = lbl[j2];
+        cand.push([dist(lab[i2], refs[B], 0.35) + dist(lab[j2], refs[A], 0.35) - dist(lab[i2], refs[A], 0.35) - dist(lab[j2], refs[B], 0.35), i2, j2]);
+      }
+      cand.sort(function (x, y) { return x[0] - y[0]; });
+      for (var c2 = 0; c2 < Math.min(25, cand.length) && !found; c2++) {
+        var L2 = lbl.slice(), t2 = L2[cand[c2][1]]; L2[cand[c2][1]] = L2[cand[c2][2]]; L2[cand[c2][2]] = t2;
+        found = layoutSearch(L2);
+      }
     }
     var use = found || lbl;
     return { paint: use.map(function (x) { return best[x]; }), lbl: use, ok: !!found, err: found ? null : validate(new Uint8Array(lbl)), scheme: best };
+  }
+  // try every quarter-turn of every face (a face photographed sideways or upside down)
+  var ROT_ORDER = [0, 2, 1, 3];
+  function layoutSearch(L0) {
+    var rot = [], f, k, r, c;
+    for (f = 0; f < 6; f++) {
+      rot[f] = [];
+      var cur = L0.slice(f * 9, f * 9 + 9);
+      for (k = 0; k < 4; k++) {
+        rot[f][k] = cur;
+        var nx = []; for (r = 0; r < 3; r++) for (c = 0; c < 3; c++) nx[r * 3 + c] = cur[(2 - c) * 3 + r];
+        cur = nx;
+      }
+    }
+    var ns = new Uint8Array(54), sideOrder = [[0, 0, 0, 0]], res = null;
+    // sides upright first, then any rotation
+    for (var pass = 0; pass < 2 && !res; pass++) {
+      var sideRots = pass === 0 ? [0] : ROT_ORDER;
+      for (var u = 0; u < 4 && !res; u++) for (var d = 0; d < 4 && !res; d++)
+        for (var r1 = 0; r1 < sideRots.length && !res; r1++) for (var r2 = 0; r2 < sideRots.length && !res; r2++)
+          for (var r4 = 0; r4 < sideRots.length && !res; r4++) for (var r5 = 0; r5 < sideRots.length && !res; r5++) {
+            var pick = [ROT_ORDER[u], sideRots[r1], sideRots[r2], ROT_ORDER[d], sideRots[r4], sideRots[r5]];
+            for (f = 0; f < 6; f++) { var src = rot[f][pick[f]]; for (k = 0; k < 9; k++) ns[f * 9 + k] = src[k]; }
+            if (!validate(ns)) res = Array.prototype.slice.call(ns);
+          }
+    }
+    return res;
+  }
+  // the cube may have been turned right instead of left between side faces
+  function classifyCaptured(list) {
+    var maps = [SCAN.map(function (s) { return s.f; }), SCAN.map(function (s) { return s.f === 1 ? 4 : s.f === 4 ? 1 : s.f; })], first = null;
+    for (var m = 0; m < maps.length; m++) {
+      var fl = []; list.forEach(function (rgb, i) { fl[maps[m][i]] = rgb; });
+      var r = classify(fl); if (r.ok) return r; if (!first) first = r;
+    }
+    return first;
   }
   function showTab(t) {
     $('tScan').classList.toggle('on', t === 'scan'); $('tPaint').classList.toggle('on', t === 'paint');
@@ -1297,8 +1342,7 @@ function demoState() { var s = randomState(); return applyAlg(s, solveCross(s));
     $('scBack').disabled = !n;
   }
   function finishLive() {
-    var fl = []; SCAN.forEach(function (s, i) { fl[s.f] = live.faces[i]; });
-    var r = classify(fl);
+    var r = classifyCaptured(live.faces);
     closeLive();
     if (r.ok) {
       var ns = new Uint8Array(r.lbl), sc = r.scheme.slice();
@@ -1315,6 +1359,7 @@ function demoState() { var s = randomState(); return applyAlg(s, solveCross(s));
       $('mineCard').scrollIntoView({ behavior: 'smooth' });
     }
   }
+  if (location.search.indexOf('cctest') >= 0) window.__cc = { classifyCaptured: classifyCaptured };
   $('liveBtn').onclick = openLive;
   $('scClose').onclick = closeLive;
   $('scSnap').onclick = function () { captureLive(live.cur); };
