@@ -225,6 +225,12 @@ select{font:inherit;background:#0f1b30;color:var(--ink);border:1px solid var(--l
 .algrow{grid-template-columns:1fr auto}
 .algrow .row{grid-row:1;grid-column:2;flex-wrap:nowrap}
 .algrow button{grid-row:auto;grid-column:auto}
+button.setrow{display:block;width:100%;text-align:left;font:inherit;color:inherit;background:transparent;border:0;border-top:1px dashed var(--line);border-radius:0;min-height:0;cursor:pointer}
+button.setrow:hover{background:#0f1b30}
+button.setrow.on{background:#1a0b20;border-radius:6px}
+.here{font-family:var(--mono);font-size:10px;color:var(--mag);border:1px solid var(--mag);border-radius:4px;padding:1px 4px}
+.skips{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:2px}
+.linkbtn{background:transparent;border:1px solid var(--line);color:var(--cyan);min-height:36px;padding:6px 10px;font-size:14px}
 
 </style>
 </head>
@@ -1037,6 +1043,20 @@ function demoState() { var s = randomState(); return applyAlg(s, solveCross(s));
     if (busy || !plan || plan.idx === 0) return;
     back(2.2).then(function () { setTimeout(function () { fwd(); }, 250); });
   }
+  function jumpTo(target) {
+    if (busy || !plan) return;
+    target = Math.max(0, Math.min(plan.sets.length, target));
+    if (target === plan.idx) return;
+    playing = false; setPlayIcon();
+    var i;
+    if (target > plan.idx) for (i = plan.idx; i < target; i++) state = applyAlg(state, plan.sets[i].moves);
+    else for (i = plan.idx - 1; i >= target; i--) state = applyAlg(state, invAlg(plan.sets[i].moves));
+    var from = plan.idx; plan.idx = target; plan.mi = -1; $('badge').textContent = '';
+    if (target >= plan.sets.length) { paint(); finishPlan(); return; }
+    setFocus(plan.segs[plan.sets[target].si].focus);
+    toast(target > from ? 'Jumped ahead to set ' + (target + 1) : 'Went back to set ' + (target + 1));
+    updateList(); hud(); syncMove(); save();
+  }
   function finishPlan() {
     var p = plan; plan = null; playing = false; setPlayIcon(); setFocus(null); $('badge').textContent = '';
     if (p.custom) { toast(p.segs[0].title + ' done'); refresh(); return; }
@@ -1068,7 +1088,8 @@ function demoState() { var s = randomState(); return applyAlg(s, solveCross(s));
     }).join('');
     el.innerHTML = '<div class="setbox"><div class="n">SET ' + (plan.idx + 1) + ' OF ' + plan.sets.length + ' · ' + seg.title.toUpperCase() + '</div>' +
       '<div class="st">' + cs.title + '</div><div class="goal"><b>Goal</b> ' + cs.goal + '</div><div class="mchips">' + chips + '</div>' +
-      (mode === 'follow' && !busy ? '<div class="n">DO THIS SET ON YOUR CUBE, THEN TAP "I DID THIS SET"</div>' : '') + '</div>';
+      (mode === 'follow' && !busy ? '<div class="n">DO THIS SET ON YOUR CUBE, THEN TAP "I DID THIS SET"</div>' : '') +
+      (!busy ? '<div class="skips"><button class="linkbtn" data-skip="step">Skip to the end of this step &#187;</button><span class="n">or tap any set in the step list below</span></div>' : '') + '</div>';
   }
   function syncMove() {
     var el = $('moveline'), cs = curSet();
@@ -1148,6 +1169,7 @@ function demoState() { var s = randomState(); return applyAlg(s, solveCross(s));
     h += '<p class="tip">' + (s.tip.indexOf('<b>') === 0 ? '' : '<b>Tip</b> ') + fill(s.tip).replace(/\. <b>/g, '.<br><b>') + '</p>';
     if (st === 2) h += '<div class="seg2" role="group" aria-label="Corner method"><button id="cmBeg" aria-pressed="' + !shortC + '">Repeat one algorithm</button><button id="cmShort" aria-pressed="' + shortC + '">Shortest moves</button></div>';
     h += '<div class="row"><button class="pri" id="cGuide">' + (plan ? 'Restart this step' : 'Show me this step') + '</button><label class="chk"><input type="checkbox" id="cSpot"' + (spotlight ? ' checked' : '') + '> Spotlight pieces</label></div>';
+    if (plan) h += '<p class="sub">Tap any set to jump straight to it, forward or back.</p>';
     h += '<div class="seglist" id="seglist"></div>';
     el.innerHTML = h;
     $('cGuide').onclick = function () { if (busy) return; stopAll(); ensurePlan(); hud(); };
@@ -1169,7 +1191,7 @@ function demoState() { var s = randomState(); return applyAlg(s, solveCross(s));
       plan.sets.forEach(function (x, i) {
         if (x.si !== si) return;
         var sc = i === plan.idx ? 'on' : i < plan.idx ? 'past' : '';
-        h += '<div class="setrow ' + sc + '"><div class="sr1"><span class="sn">' + x.title + '</span><span class="mv">' + x.moves.map(function (m) { return '<i>' + m + '</i>'; }).join('') + '</span></div><div class="x">' + x.goal + '</div></div>';
+        h += '<button class="setrow jump ' + sc + '" data-set="' + i + '" aria-label="Jump to set ' + (i + 1) + ': ' + x.title + '"><div class="sr1"><span class="sn">' + x.title + '</span><span class="mv">' + x.moves.map(function (m) { return '<i>' + m + '</i>'; }).join('') + '</span>' + (i === plan.idx ? '<span class="here">YOU ARE HERE</span>' : '') + '</div><div class="x">' + x.goal + '</div></button>';
       });
       h += '</div>';
     });
@@ -1587,6 +1609,8 @@ function demoState() { var s = randomState(); return applyAlg(s, solveCross(s));
     if (b.dataset.w !== undefined) { watchAlg(ALGS[+b.dataset.w]); return; }
     if (b.dataset.case !== undefined) watchAlg(ALGS[0], ALGS[0].cases[+b.dataset.case].k);
   };
+  $('coach').addEventListener('click', function (e) { var j = e.target.closest('button[data-set]'); if (j) { jumpTo(+j.dataset.set); return; } });
+  $('moveline').addEventListener('click', function (e) { var k = e.target.closest('button[data-skip]'); if (k && plan) jumpTo(plan.sets.length); });
   $('coach').addEventListener('click', function (e) { var b = e.target.closest('button[data-case]'); if (b) watchAlg(ALGS[0], ALGS[0].cases[+b.dataset.case].k); });
   var quizCur = null, revealed = false;
   function pickQuiz() {
