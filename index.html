@@ -191,6 +191,27 @@ select{font:inherit;background:#0f1b30;color:var(--ink);border:1px solid var(--l
 .scanner .msg{max-width:420px;text-align:center}
 .scanner .msg a{color:var(--cyan)}
 
+.setbox{display:flex;flex-direction:column;gap:6px;width:100%}
+.setbox .n{font-family:var(--mono);font-size:11px;color:var(--mute);letter-spacing:.04em}
+.setbox .st{font-family:var(--disp);font-size:18px;color:#fff;letter-spacing:.03em}
+.setbox .goal{font-size:15px;line-height:1.35}
+.setbox .goal b{color:var(--ok);font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;margin-right:4px}
+.mchips{display:flex;flex-wrap:wrap;gap:6px}
+.mchip{display:flex;flex-direction:column;align-items:center;gap:1px;min-width:62px;max-width:96px;padding:5px 6px;border:1px solid var(--line);border-radius:8px;background:#0a1322;text-align:center}
+.mchip b{font-family:var(--disp);font-size:20px;color:var(--mag);line-height:1.1}
+.mchip small{font-size:11px;color:var(--mute);line-height:1.15}
+.mchip.on{border-color:var(--mag);box-shadow:0 0 14px #ff3df066;background:#24102c}
+.mchip.on small{color:#fff}
+.mchip.past{opacity:.45}
+.setrow{border-top:1px dashed var(--line);margin-top:6px;padding-top:6px}
+.setrow .sr1{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.setrow .sn{font-size:13px;font-weight:600;color:var(--cyan)}
+.setrow .mv{margin:0}
+.setrow.on .sn{color:var(--mag)}
+.setrow.on{background:#1a0b20;border-radius:6px;padding:6px}
+.setrow.past{opacity:.5}
+.moveline{min-height:110px;align-items:flex-start}
+
 </style>
 </head>
 <body>
@@ -219,10 +240,12 @@ select{font:inherit;background:#0f1b30;color:var(--ink);border:1px solid var(--l
       <label class="chk"><input type="checkbox" id="autoView" checked> Auto-turn view</label>
     </div>
     <div class="bar">
-      <button class="ctl" id="bBack" title="Undo last move" aria-label="Back one move">&#9198;</button>
-      <button class="ctl pri" id="bPlay" title="Play or pause" aria-label="Play">&#9654;</button>
-      <button class="ctl" id="bNext" title="Next move" aria-label="Next move">&#9197;</button>
-      <button class="pri done" id="bDone" hidden>I did it &#10003;</button>
+      <button class="ctl" id="bBack" title="Undo the last set" aria-label="Back one set">&#9198;</button>
+      <button class="ctl" id="bReplay" title="Replay the last set" aria-label="Replay last set">&#8634;</button>
+      <button class="ctl pri" id="bPlay" title="Play all sets" aria-label="Play all sets">&#9654;</button>
+      <button class="ctl" id="bNext" title="Play the next set" aria-label="Next set">&#9197;</button>
+      <button id="bPrev" hidden>Show me</button>
+      <button class="pri done" id="bDone" hidden>I did this set &#10003;</button>
       <button id="bFlip">Flip view</button>
       <label class="grow" id="speedWrap">Speed <input type="range" id="speed" min="0.5" max="3" step="0.1" value="1" aria-label="Speed"></label>
     </div>
@@ -528,7 +551,7 @@ function planCorners(state, names) {
       if (cur.pos[1] === -1) {
         var alg = cornerMacro(cur);
         s = applyAlg(s, alg);
-        segs.push({ title: nm + ': pop it out', text: 'It is in the bottom layer but not home. Run the corner algorithm once to lift it into the top layer.', moves: alg, focus: [labs.slice()] });
+        segs.push({ title: nm + ': pop it out', text: 'It is in the bottom layer but not home. Run the corner algorithm once to lift it into the top layer.', moves: alg, focus: [labs.slice()], alg: 'corner', passGoal: 'Lift the corner out of the wrong slot and into the top layer, so it can be brought home.' });
         continue;
       }
       var kk = 0;
@@ -538,11 +561,11 @@ function planCorners(state, names) {
       }
       if (UTRIES[kk].length) {
         s = applyAlg(s, UTRIES[kk]);
-        segs.push({ title: nm + ': line it up', text: 'Turn the top layer until the corner sits directly above its home slot.', moves: UTRIES[kk], focus: [labs.slice()] });
+        segs.push({ title: nm + ': line it up', text: 'Turn the top layer until the corner sits directly above its home slot.', moves: UTRIES[kk], focus: [labs.slice()], setTitle: 'Line it up', setGoal: 'Park the corner directly above its home slot, between its two matching centers.' });
       }
       var a2 = cornerMacro(target), reps = 0, all = [];
       while (!pieceSolved(s, target) && reps < 6) { s = applyAlg(s, a2); all = all.concat(a2); reps++; }
-      segs.push({ title: nm + ': drop it in', text: 'Repeat ' + a2.join(' ') + ' ' + reps + (reps === 1 ? ' time' : ' times') + ' until the corner clicks into place.', moves: all, focus: [labs.slice()] });
+      segs.push({ title: nm + ': drop it in', text: 'Repeat ' + a2.join(' ') + ' ' + reps + (reps === 1 ? ' time' : ' times') + ' until the corner clicks into place.', moves: all, focus: [labs.slice()], alg: 'corner' });
     }
   });
   return { segs: segs, end: s };
@@ -585,14 +608,14 @@ function planCornersShort(state, names) {
     var cur = findSlot(s, CORNER_SLOTS, target.home);
     if (cur.pos[1] === -1 && (cur.pos[0] !== target.pos[0] || cur.pos[2] !== target.pos[2])) {
       var alg = cornerMacro(cur); s = applyAlg(s, alg);
-      segs.push({ title: nm + ': pop it out', text: 'It is in the wrong bottom slot. Lift it into the top layer first.', moves: alg, focus: [labs.slice()] });
+      segs.push({ title: nm + ': pop it out', text: 'It is in the wrong bottom slot. Lift it into the top layer first.', moves: alg, focus: [labs.slice()], alg: 'corner', passGoal: 'Lift the corner out of the wrong slot and into the top layer, so it can be brought home.' });
     }
     var fx = target.pos[0] === 1 ? 'R' : 'L', fz = target.pos[2] === 1 ? 'F' : 'B';
     var keep = DE.concat(DC.filter(function (c) { return c === target || pieceSolved(s, c); }));
     var sol = searchKeep(s, keep, ['U', "U'", 'U2', fx, fx + "'", fz, fz + "'"], 10);
     if (!sol) throw new Error('corner search failed');
     s = applyAlg(s, sol);
-    segs.push({ title: nm + ': insert it', text: 'The shortest insert for this corner. Watch which way the white sticker faces before it drops in.', moves: sol, focus: [labs.slice()] });
+    segs.push({ title: nm + ': insert it', text: 'The shortest insert for this corner. Watch which way the white sticker faces before it drops in.', moves: sol, focus: [labs.slice()], pre: leadU(sol), alignGoal: 'Park the corner next to its home slot so it can drop straight in.', setTitle: 'Drop it in', setGoal: 'Bring the corner down into its slot. Watch the white sticker: it ends facing down.' });
   });
   return { segs: segs, end: s };
 }
@@ -616,7 +639,7 @@ function planMiddle(state, names) {
           s = applyAlg(s, mv);
           segs.push({ title: names[labs[0]] + '-' + names[labs[1]] + ' edge: send it ' + (right ? 'right' : 'left'),
             text: 'Turn the top until the side color matches the ' + names[side] + ' center, then send the edge to the ' + (right ? 'right' : 'left') + '.',
-            moves: mv, focus: [labs.slice()] });
+            moves: mv, focus: [labs.slice()], pre: UTRIES[j].length, alg: right ? 'midR' : 'midL', alignGoal: 'Turn the top until the edge\'s side color matches the center below it, making an upside-down T.' });
           done = true;
         }
       }
@@ -628,7 +651,7 @@ function planMiddle(state, names) {
       var alg2 = insertRight(f);
       var lb = lab(s, bad);
       s = applyAlg(s, alg2);
-      segs.push({ title: 'Free a stuck edge', text: 'A middle edge sits in the wrong slot. Run the insert algorithm on that slot to pop it up to the top.', moves: alg2, focus: [lb.slice()] });
+      segs.push({ title: 'Free a stuck edge', text: 'A middle edge sits in the wrong slot. Run the insert algorithm on that slot to pop it up to the top.', moves: alg2, focus: [lb.slice()], alg: 'midR' });
     }
   }
   return { segs: segs, end: s };
@@ -653,14 +676,14 @@ function macroSearch(state, macros, goal, maxD) {
   return null;
 }
 var UM = [macro('U', 'U', true), macro("U'", "U'", true), macro('U2', 'U2', true)];
-function planMacro(state, algs, goal, maxD, algTitle, algText, focus) {
+function planMacro(state, algs, goal, maxD, algTitle, algText, focus, alignGoal) {
   var path = macroSearch(state, UM.concat(algs), goal, maxD);
   if (!path) throw new Error('no plan');
   var s = state, segs = [], pass = 0;
-  path.forEach(function (m) {
+  path.forEach(function (m, pi) {
     s = applyPerm(s, m.perm);
-    if (m.isU) segs.push({ title: 'Line up the top layer', text: 'Turn the top layer so the pattern matches what the algorithm expects.', moves: m.tokens, focus: focus });
-    else { pass++; segs.push({ title: algTitle + ' (pass ' + pass + ')', text: algText, moves: m.tokens, focus: focus }); }
+    if (m.isU) { var last = pi === path.length - 1; segs.push({ title: last ? 'Final turn' : 'Line up the top layer', text: last ? 'Turn the top layer so it lines up with the centers.' : 'Turn the top layer so the pattern matches what the algorithm expects.', moves: m.tokens, focus: focus, setTitle: last ? 'Finish' : 'Line it up', setGoal: last ? 'Turn the top until every side is one color. Solved!' : alignGoal }); }
+    else { pass++; segs.push({ title: algTitle + ' (pass ' + pass + ')', text: algText, moves: m.tokens, focus: focus, alg: m.name }); }
   });
   return { segs: segs, end: s };
 }
@@ -670,21 +693,96 @@ var A_CORN = macro('corn', "U R U' L' U R' U' L", false);
 var A_UA = macro('ua', "R U' R U R U R U' R' U' R2", false);
 var A_UB = macro('ub', "R2 U R U R' U' R' U' R' U R'", false);
 
+function leadU(mv) { var k = 0; while (k < mv.length && mv[k][0] === 'U') k++; return k === mv.length ? 0 : k; }
+function bfsTrack(start, goal) {
+  var n = start.length;
+  function key(a) { var k = 0; for (var i = 0; i < n; i++) k = k * 54 + a[i]; return k; }
+  var gk = key(goal), sk = key(start);
+  if (gk === sk) return [];
+  var perms = TOKENS.map(function (t) { return PERM[t]; }), parent = new Map(); parent.set(sk, -1);
+  var frontier = [start], found = false;
+  while (frontier.length && !found) {
+    var next = [];
+    for (var fi = 0; fi < frontier.length && !found; fi++) {
+      var cur = frontier[fi], ck = key(cur);
+      for (var m = 0; m < 18; m++) {
+        var p = perms[m], k = 0, nx = new Array(n);
+        for (var i = 0; i < n; i++) { nx[i] = p[cur[i]]; k = k * 54 + nx[i]; }
+        if (parent.has(k)) continue;
+        parent.set(k, ck * 18 + m);
+        if (k === gk) { found = true; break; }
+        next.push(nx);
+      }
+    }
+    frontier = next;
+  }
+  var moves = [], k2 = gk;
+  while (parent.get(k2) !== -1) { var v = parent.get(k2), mm = v % 18; moves.push(TOKENS[mm]); k2 = (v - mm) / 18; }
+  return moves.reverse();
+}
+function planCross(state, names) {
+  var s = state, segs = [], placed = [], left = DE.filter(function (e) { return !pieceSolved(s, e); });
+  var done = DE.filter(function (e) { return pieceSolved(s, e); });
+  function track(list) {
+    var st = [], gl = [];
+    list.forEach(function (slot) {
+      var cur = findSlot(s, EDGE_SLOTS, slot.home);
+      slot.st.forEach(function (i) { for (var k = 0; k < 2; k++) if (s[cur.st[k]] === ST[i].f) st.push(cur.st[k]); gl.push(i); });
+    });
+    return [st, gl];
+  }
+  while (left.length) {
+    var best = null;
+    left.forEach(function (e) { var t = track(done.concat([e])), mv = bfsTrack(t[0], t[1]); if (!best || mv.length < best.mv.length) best = { e: e, mv: mv }; });
+    s = applyAlg(s, best.mv);
+    var other = best.e.st.map(function (i) { return ST[i].f; }).filter(function (f) { return f !== 3; })[0];
+    segs.push({ title: names[3] + '-' + names[other] + ' edge', text: 'Shortest way to bring this edge home without disturbing the edges already placed.', moves: best.mv, focus: [[3, other]],
+      setTitle: 'Bring it home', setGoal: 'Put this edge under its ' + names[other] + ' center with ' + names[3] + ' facing down. Edges already placed end up back where they were.' });
+    done.push(best.e); left = left.filter(function (e) { return e !== best.e; });
+  }
+  return { segs: segs, end: s };
+}
+var SETDEF = {
+  corner: [[4, 'Corner pass', 'Lift the corner out of its slot, turn the top, and set it back. Each pass twists the corner one step until white faces down.']],
+  midR: [[4, 'Pair up', 'Lift the white corner below the slot into the top layer, where it pairs up with the edge.'], [4, 'Put the pair in', 'Bring the corner back down. It carries the edge into the middle slot.']],
+  midL: [[4, 'Pair up', 'Lift the white corner below the slot into the top layer, where it pairs up with the edge.'], [4, 'Put the pair in', 'Bring the corner back down. It carries the edge into the middle slot.']],
+  yc: [[1, 'Open the front', 'Tip the front face so the right side can reach the top edges.'], [4, 'Flip edges up', 'Cycle edges through the right side so more yellow edges end up on top.'], [1, 'Close the front', 'Return the front face. The bottom layers are back in place.']],
+  sune: [[4, 'Start the twist', 'Take a corner out through the right side and slide the top one spot.'], [3, 'Finish the twist', 'Repeat with a half turn of the top. The bottom layers return, and three top corners end up twisted.']],
+  corn: [[3, 'Move a corner aside', 'Shift one top corner out of the way using the right side.'], [1, 'Open the left', 'Lift the left side. A different corner now sits at front left.'], [3, 'Undo the first set', 'Reverse the first set. Because the left side is open, it moves a different corner.'], [1, 'Close the left', 'Put the left side back. Three corners have traded places, and the front-right corner stayed put.']],
+  ua: [[2, 'Open the right', 'Turn the right side and shift the top to start moving edges.'], [6, 'Cycle the edges', 'Carry edges around the top through the right side.'], [3, 'Close the right', 'Return the right side. Everything snaps back except three top edges, which each moved one spot.']],
+  ub: [[3, 'Open the right', 'Turn the right side and shift the top to start moving edges.'], [5, 'Cycle the edges', 'Carry edges around the top through the right side.'], [3, 'Close the right', 'Return the right side. Everything snaps back except three top edges, which each moved one spot.']]
+};
+function setsFor(seg) {
+  var out = [], mv = seg.moves, i = 0, pre = seg.pre || 0;
+  if (pre) { out.push({ moves: mv.slice(0, pre), title: 'Line it up', goal: seg.alignGoal || 'Turn the top layer so the pieces sit where the next set expects them.' }); i = pre; }
+  if (seg.alg && SETDEF[seg.alg]) {
+    var def = SETDEF[seg.alg], per = def.reduce(function (a, d) { return a + d[0]; }, 0), n = Math.round((mv.length - i) / per), k = 0;
+    while (i < mv.length) {
+      def.forEach(function (d) {
+        out.push({ moves: mv.slice(i, i + d[0]), title: d[1] + (def.length === 1 && n > 1 ? ' ' + (k + 1) + ' of ' + n : ''), goal: seg.passGoal || d[2] });
+        i += d[0];
+      });
+      k++;
+    }
+  } else if (i < mv.length) out.push({ moves: mv.slice(i), title: seg.setTitle || seg.title, goal: seg.setGoal || seg.text });
+  return out;
+}
 function planStage(state, names, opts) {
   names = names || DEFAULT_NAMES; opts = opts || {};
   var st = stageOf(state), r;
   var yEdges = [[0, 2], [0, 1], [0, 5], [0, 4]], yCorners = [[0, 1, 2], [0, 2, 4], [0, 4, 5], [0, 5, 1]];
   if (st === 1) {
-    var mv = solveCross(state);
-    r = { segs: [{ title: 'Build the white cross', text: 'Shortest sequence that places all four white edges next to their matching centers.', moves: mv, focus: [[3, 2], [3, 1], [3, 5], [3, 4]] }], end: applyAlg(state, mv) };
+    r = planCross(state, names);
   } else if (st === 2) r = opts.short ? planCornersShort(state, names) : planCorners(state, names);
   else if (st === 3) r = planMiddle(state, names);
-  else if (st === 4) r = planMacro(state, [A_YC], yEdgesUp, 8, 'Yellow cross algorithm', 'Run F R U R\' U\' F\'. Repeat until a yellow plus appears.', yEdges);
-  else if (st === 5) r = planMacro(state, [A_SUNE], yFaceUp, 9, 'Sune', 'Run the Sune to twist corners face up. The bottom two layers stay intact.', yCorners);
-  else if (st === 6) r = planMacro(state, [A_CORN], function (s) { return allSolved(s, UC); }, 9, 'Corner swap', 'Cycle three corners while keeping their twist.', yCorners);
-  else if (st === 7) r = planMacro(state, [A_UA, A_UB], function (s) { return stageOf(s) === 8; }, 8, 'Edge cycle', 'Cycle three top edges. Everything else stays put.', yEdges);
+  else if (st === 4) r = planMacro(state, [A_YC], yEdgesUp, 8, 'Yellow cross algorithm', 'Run F R U R\' U\' F\'. Repeat until a yellow plus appears.', yEdges, 'Hold the shape the right way: a line goes left to right, an L points to the back and left.');
+  else if (st === 5) r = planMacro(state, [A_SUNE], yFaceUp, 9, 'Sune', 'Run the Sune to twist corners face up. The bottom two layers stay intact.', yCorners, 'Put the correct corner at front left: the fish corner, or one showing yellow on its left side.');
+  else if (st === 6) r = planMacro(state, [A_CORN], function (s) { return allSolved(s, UC); }, 9, 'Corner swap', 'Cycle three corners while keeping their twist.', yCorners, 'Hold the corner that is already in its correct spot at front right.');
+  else if (st === 7) r = planMacro(state, [A_UA, A_UB], function (s) { return stageOf(s) === 8; }, 8, 'Edge cycle', 'Cycle three top edges. Everything else stays put.', yEdges, 'Turn the top so the finished edge sits at the back.');
   else return null;
   r.stage = st;
+  r.segs = r.segs.filter(function (g) { return g.moves.length; });
+  r.segs.forEach(function (g) { g.sets = setsFor(g); });
   return r;
 }
 
@@ -712,11 +810,11 @@ function demoState() { var s = randomState(); return applyAlg(s, solveCross(s));
     null,
     { name: 'White cross', short: 'Cross', body: 'Four {W} edges form a plus on the bottom, and each edge also matches the center color on its side.', alg: '', tip: 'Hold {W} on the bottom for every step from here on.' },
     { name: 'White corners', short: 'Corners', body: 'Finish the bottom layer. Find a {W} corner in the top layer, turn the top until it sits right above its home slot, then repeat the algorithm until it drops in. A {W} corner stuck in the wrong bottom spot needs the algorithm once to pop it up.', alg: "R U R' U'", tip: 'Repeat it 1 to 5 times. Watch the corner twist each pass.' },
-    { name: 'Middle layer', short: 'Middle', body: 'Find a top edge with no {Y}. Turn the top until its side color matches the center below it. Then send it left or right, depending on which center its top color matches.', alg: "Right: U R U' R' U' F' U F\nLeft:  U' L' U L U F U' F'", tip: 'If every top edge has {Y} but the middle is unfinished, run one algorithm on the stuck slot to pop its edge out.' },
-    { name: 'Yellow cross', short: 'Y-Cross', body: 'Make a {Y} plus on top. Match your top to one of the pictures below.', alg: "F R U R' U' F'", tip: '<b>Line:</b> hold it left to right, run once. <b>L:</b> point it to the back and left, run twice. <b>Dot:</b> run once to get an L or a line. Ignore the corners for now.' },
-    { name: 'Yellow face', short: 'Y-Face', body: 'Turn every {Y} corner face up with the Sune. You need at most three.', alg: "R U R' U R U2 R'", tip: '<b>One corner up (a fish):</b> put that corner at front left, then Sune. <b>None or two up:</b> turn the top until the front-left corner shows {Y} on its left side, then Sune.' },
-    { name: 'Corner positions', short: 'Place', body: 'Move the {Y} corners to their correct spots. Find a corner already sitting between its two matching centers (it may look twisted). Hold it at front right and run the algorithm. Repeat if needed.', alg: "U R U' L' U R' U' L", tip: 'No corner in the right spot? Run the algorithm once from anywhere, then look again.' },
-    { name: 'Final edges', short: 'Finish', body: 'Cycle the last three edges into place. Keep the finished edge at the back and run the first algorithm.', alg: "R U' R U R U R U' R' U' R2\nor R2 U R U R' U' R' U' R' U R'", tip: 'If the edges moved the wrong way, use the second algorithm instead. No edge finished? Run either once, then look again.' }
+    { name: 'Middle layer', short: 'Middle', body: 'Find a top edge with no {Y}. Turn the top until its side color matches the center below it. Then send it left or right, depending on which center its top color matches.', alg: "Right: U R U' R' · U' F' U F\nLeft:  U' L' U L · U F U' F'", tip: 'If every top edge has {Y} but the middle is unfinished, run one algorithm on the stuck slot to pop its edge out.' },
+    { name: 'Yellow cross', short: 'Y-Cross', body: 'Make a {Y} plus on top. Match your top to one of the pictures below.', alg: "F · R U R' U' · F'", tip: '<b>Line:</b> hold it left to right, run once. <b>L:</b> point it to the back and left, run twice. <b>Dot:</b> run once to get an L or a line. Ignore the corners for now.' },
+    { name: 'Yellow face', short: 'Y-Face', body: 'Turn every {Y} corner face up with the Sune. You need at most three.', alg: "R U R' U · R U2 R'", tip: '<b>One corner up (a fish):</b> put that corner at front left, then Sune. <b>None or two up:</b> turn the top until the front-left corner shows {Y} on its left side, then Sune.' },
+    { name: 'Corner positions', short: 'Place', body: 'Move the {Y} corners to their correct spots. Find a corner already sitting between its two matching centers (it may look twisted). Hold it at front right and run the algorithm. Repeat if needed.', alg: "U R U' · L' · U R' U' · L", tip: 'No corner in the right spot? Run the algorithm once from anywhere, then look again.' },
+    { name: 'Final edges', short: 'Finish', body: 'Cycle the last three edges into place. Keep the finished edge at the back and run the first algorithm.', alg: "R U' · R U R U R U' · R' U' R2\nor R2 U R · U R' U' R' U' · R' U R'", tip: 'If the edges moved the wrong way, use the second algorithm instead. No edge finished? Run either once, then look again.' }
   ];
   var ALGS = [
     { id: 'corner', name: 'Corner insert', step: 2, alg: "R U R' U'" },
@@ -827,14 +925,14 @@ function demoState() { var s = randomState(); return applyAlg(s, solveCross(s));
     });
   }
 
-  function turn(tok) {
+  function turn(tok, mul) {
     return new Promise(function (res) {
       var f = SIDE.indexOf(tok[0]), mod = tok[1];
       var dir = mod === "'" ? -1 : mod === '2' ? 2 : 1, ax = AXIS[tok[0]];
       var layer = cubies.filter(function (c) { return c.pos[0] * NORM[f][0] + c.pos[1] * NORM[f][1] + c.pos[2] * NORM[f][2] === 1; });
       layer.forEach(function (c) { c.faces.forEach(function (x) { x.el.classList.add('turn'); }); });
       $('badge').textContent = tok; showArrow(tok);
-      var total = ax[1] * 90 * dir, dur = (dir === 2 ? 620 : 420) / speed, t0 = performance.now();
+      var total = ax[1] * 90 * dir, dur = (dir === 2 ? 620 : 420) / (speed * (mul || 1)), t0 = performance.now();
       if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) dur = 1;
       (function step(t) {
         var p = Math.min(1, (t - t0) / dur), e = p < .5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
@@ -849,43 +947,72 @@ function demoState() { var s = randomState(); return applyAlg(s, solveCross(s));
     });
   }
 
-  /* ---------- plan / playback ---------- */
+  /* ---------- plan / playback (by sets) ---------- */
   function setFocus(list) { focusKeys = list ? list.map(keyOf) : null; paint(); }
   function makePlan(segs, extra) {
-    var flat = [];
-    segs.forEach(function (g, si) { g.moves.forEach(function (m, mi) { flat.push({ tok: m, si: si, mi: mi }); }); });
-    var p = { segs: segs, flat: flat, idx: 0 };
+    var sets = [], total = 0;
+    segs.forEach(function (g, si) { (g.sets || [{ moves: g.moves, title: g.title, goal: g.text }]).forEach(function (x, ki) { sets.push({ si: si, ki: ki, moves: x.moves, title: x.title, goal: x.goal }); total += x.moves.length; }); });
+    var p = { segs: segs, sets: sets, idx: 0, mi: -1, total: total };
     for (var k in extra) p[k] = extra[k];
     return p;
   }
+  function curSet() { return plan && plan.sets[plan.idx]; }
   function ensurePlan() {
     if (plan) return plan;
     if (stash) return null;
     var p = planStage(state, nm(), { short: shortC });
     if (!p) return null;
     plan = makePlan(p.segs, { stage: p.stage });
-    if (!plan.flat.length) { plan = null; return null; }
+    if (!plan.sets.length) { plan = null; return null; }
     setFocus(p.segs[0].focus); renderCoach(); syncMove(); return plan;
   }
-  function fwd() {
+  function runMoves(list, mul) {
+    var i = 0;
+    return new Promise(function (res) {
+      (function next() {
+        if (i >= list.length) { res(); return; }
+        var t = list[i];
+        if (plan) { plan.mi = t.mi; renderSet(); }
+        aimCamera(t.tok);
+        turn(t.tok, mul).then(function () { i++; setTimeout(next, 90 / speed); });
+      })();
+    });
+  }
+  function fwd(mul) {
     if (busy) return Promise.resolve();
     if (!ensurePlan()) return Promise.resolve();
-    var cur = plan.flat[plan.idx];
-    if (!cur) return Promise.resolve();
-    busy = true; setFocus(plan.segs[cur.si].focus); aimCamera(cur.tok);
-    return turn(cur.tok).then(function () {
-      busy = false; plan.idx++;
-      var nx = plan.flat[plan.idx];
+    var cs = curSet();
+    if (!cs) return Promise.resolve();
+    busy = true; setFocus(plan.segs[cs.si].focus);
+    return runMoves(cs.moves.map(function (t, k) { return { tok: t, mi: k }; }), mul).then(function () {
+      busy = false; plan.idx++; plan.mi = -1; $('badge').textContent = '';
+      var nx = curSet();
       if (nx) { setFocus(plan.segs[nx.si].focus); updateList(); hud(); syncMove(); }
       else finishPlan();
     });
   }
-  function back() {
+  function back(mul) {
     if (busy || !plan || plan.idx === 0) return Promise.resolve();
     busy = true; playing = false; setPlayIcon();
-    var prev = plan.flat[plan.idx - 1];
-    setFocus(plan.segs[prev.si].focus); aimCamera(prev.tok);
-    return turn(invTok(prev.tok)).then(function () { busy = false; plan.idx--; updateList(); hud(); syncMove(); });
+    plan.idx--; var cs = curSet(); setFocus(plan.segs[cs.si].focus);
+    var list = cs.moves.map(function (t, k) { return { tok: invTok(t), mi: k }; }).reverse();
+    return runMoves(list, mul || 1.8).then(function () { busy = false; plan.mi = -1; $('badge').textContent = ''; updateList(); hud(); syncMove(); });
+  }
+  function preview() {
+    if (busy || !ensurePlan()) return;
+    var cs = curSet(); if (!cs) return;
+    busy = true; setFocus(plan.segs[cs.si].focus);
+    var f = cs.moves.map(function (t, k) { return { tok: t, mi: k }; });
+    runMoves(f).then(function () {
+      plan.mi = -1; renderSet();
+      return new Promise(function (r) { setTimeout(r, 500); });
+    }).then(function () {
+      return runMoves(f.slice().reverse().map(function (x) { return { tok: invTok(x.tok), mi: x.mi }; }), 2.2);
+    }).then(function () { busy = false; plan.mi = -1; $('badge').textContent = ''; syncMove(); });
+  }
+  function replay() {
+    if (busy || !plan || plan.idx === 0) return;
+    back(2.2).then(function () { setTimeout(function () { fwd(); }, 250); });
   }
   function finishPlan() {
     var p = plan; plan = null; playing = false; setPlayIcon(); setFocus(null); $('badge').textContent = '';
@@ -895,36 +1022,49 @@ function demoState() { var s = randomState(); return applyAlg(s, solveCross(s));
     if (st < 8) ensurePlan();
     refresh();
   }
-  function setPlayIcon() { $('bPlay').innerHTML = playing ? '&#9208;' : '&#9654;'; $('bPlay').setAttribute('aria-label', playing ? 'Pause' : 'Play'); }
+  function setPlayIcon() { $('bPlay').innerHTML = playing ? '&#9208;' : '&#9654;'; $('bPlay').setAttribute('aria-label', playing ? 'Pause' : 'Play all sets'); }
   function playLoop() {
     if (!playing) return;
     if (!plan && !ensurePlan()) { playing = false; setPlayIcon(); return; }
-    fwd().then(function () { if (playing && plan) setTimeout(playLoop, 140 / speed); else { playing = false; setPlayIcon(); } });
+    fwd().then(function () { if (playing && plan) setTimeout(playLoop, 900 / speed); else { playing = false; setPlayIcon(); } });
   }
   function stopAll() { playing = false; setPlayIcon(); plan = null; setFocus(null); }
   function userMove(tok) {
     if (busy) return; spin = false; stopAll();
     busy = true; turn(tok).then(function () { busy = false; $('badge').textContent = ''; refresh(); });
   }
+  function setNum() { var n = 0, cs = curSet(); plan.sets.forEach(function (x, i) { if (i < plan.idx) n += x.moves.length; }); return n + (plan.mi >= 0 ? plan.mi : 0); }
+  function renderSet() {
+    var el = $('moveline'), cs = curSet();
+    if (!cs) return;
+    var seg = plan.segs[cs.si], tok = cs.moves[plan.mi >= 0 ? plan.mi : 0];
+    showArrow(tok); if (!busy) aimCamera(tok);
+    var chips = cs.moves.map(function (t, k) {
+      var c = plan.mi < 0 ? '' : k < plan.mi ? 'past' : k === plan.mi ? 'on' : '';
+      return '<span class="mchip ' + c + '"><b>' + t + '</b><small>' + words(t) + '</small></span>';
+    }).join('');
+    el.innerHTML = '<div class="setbox"><div class="n">SET ' + (plan.idx + 1) + ' OF ' + plan.sets.length + ' · ' + seg.title.toUpperCase() + '</div>' +
+      '<div class="st">' + cs.title + '</div><div class="goal"><b>Goal</b> ' + cs.goal + '</div><div class="mchips">' + chips + '</div>' +
+      (mode === 'follow' && !busy ? '<div class="n">DO THIS SET ON YOUR CUBE, THEN TAP "I DID THIS SET"</div>' : '') + '</div>';
+  }
   function syncMove() {
-    var el = $('moveline'), cur = plan && plan.flat[plan.idx];
-    if (cur) {
-      showArrow(cur.tok); if (!busy) aimCamera(cur.tok);
-      el.innerHTML = '<span class="tok">' + cur.tok + '</span><div><div class="n">' + (mode === 'follow' ? 'DO THIS ON YOUR CUBE' : 'NEXT MOVE') + ' · ' + (plan.idx + 1) + ' OF ' + plan.flat.length + '</div><div class="w">' + words(cur.tok) + '</div></div>';
-    } else {
+    var el = $('moveline'), cs = curSet();
+    if (cs) renderSet();
+    else {
       showArrow(null);
       var st = stageOf(state);
       el.innerHTML = '<div class="w" style="font-weight:500;color:var(--mute)">' + (stash ? 'Algorithm finished.' : st === 8 ? 'Solved. Scramble to go again.' : 'Tap "Show me this step" or press play.') + '</div>';
     }
-    $('bDone').disabled = !cur && (stash || stageOf(state) === 8);
+    $('bDone').disabled = !cs && (stash || stageOf(state) === 8);
+    $('bPrev').disabled = !cs; $('bReplay').disabled = !plan || !plan.idx;
   }
 
   /* ---------- UI render ---------- */
   function refresh() { hud(); renderSteps(); renderCoach(); syncPainter(); syncMove(); save(); }
   function hud() {
-    var st = stageOf(state);
+    var st = plan && !plan.custom && plan.stage ? plan.stage : stageOf(state);
     if (stash) { $('hud').innerHTML = 'ALGORITHM<br><b>' + (plan ? plan.segs[0].title.toUpperCase() : 'DONE') + '</b>'; return; }
-    $('hud').innerHTML = st === 8 ? 'STATUS <b>SOLVED</b>' : 'STEP <b>' + st + ' / 7</b><br>' + STAGES[st].name.toUpperCase() + (plan ? '<br>MOVE <b>' + plan.idx + ' / ' + plan.flat.length + '</b>' : '');
+    $('hud').innerHTML = st === 8 ? 'STATUS <b>SOLVED</b>' : 'STEP <b>' + st + ' / 7</b><br>' + STAGES[st].name.toUpperCase() + (plan ? '<br>SET <b>' + Math.min(plan.idx + 1, plan.sets.length) + ' / ' + plan.sets.length + '</b>' : '');
   }
   function renderSteps() {
     var st = stash ? stageOf(stash.state) : stageOf(state), h = '';
@@ -980,6 +1120,7 @@ function demoState() { var s = randomState(); return applyAlg(s, solveCross(s));
     h += '<p>' + fill(s.body) + '</p>';
     if (st >= 4) h += patternBlock(st);
     if (s.alg) h += '<div class="alg">' + s.alg.replace(/ /g, '&nbsp;').replace(/\n/g, '<br>') + '</div>';
+    if (s.alg && s.alg.indexOf('·') >= 0) h += '<p class="tip">Each · splits the algorithm into sets. The coach explains the goal of each set as you go.</p>';
     h += '<p class="tip">' + (s.tip.indexOf('<b>') === 0 ? '' : '<b>Tip</b> ') + fill(s.tip).replace(/\. <b>/g, '.<br><b>') + '</p>';
     if (st === 2) h += '<div class="seg2" role="group" aria-label="Corner method"><button id="cmBeg" aria-pressed="' + !shortC + '">Repeat one algorithm</button><button id="cmShort" aria-pressed="' + shortC + '">Shortest moves</button></div>';
     h += '<div class="row"><button class="pri" id="cGuide">' + (plan ? 'Restart this step' : 'Show me this step') + '</button><label class="chk"><input type="checkbox" id="cSpot"' + (spotlight ? ' checked' : '') + '> Spotlight pieces</label></div>';
@@ -997,15 +1138,19 @@ function demoState() { var s = randomState(); return applyAlg(s, solveCross(s));
     var el = $('seglist'); if (!el) return;
     if (!plan) { el.style.display = 'none'; return; }
     el.style.display = '';
-    var cur = plan.flat[plan.idx], curSi = cur ? cur.si : -1, h = '', gi = 0;
+    var cs = curSet(), curSi = cs ? cs.si : -1, h = '', gi = 0;
     plan.segs.forEach(function (g, si) {
       var cls = si === curSi ? 'cur' : (si < curSi || curSi < 0) ? 'done' : '';
-      h += '<div class="seg ' + cls + '"><div class="t">' + (si + 1) + '. ' + g.title + '</div><div class="x">' + g.text + '</div><div class="mv">';
-      g.moves.forEach(function (m) { h += '<i class="' + (gi === plan.idx ? 'on' : gi < plan.idx ? 'past' : '') + '">' + m + '</i>'; gi++; });
-      h += '</div></div>';
+      h += '<div class="seg ' + cls + '"><div class="t">' + (si + 1) + '. ' + g.title + '</div><div class="x">' + g.text + '</div>';
+      plan.sets.forEach(function (x, i) {
+        if (x.si !== si) return;
+        var sc = i === plan.idx ? 'on' : i < plan.idx ? 'past' : '';
+        h += '<div class="setrow ' + sc + '"><div class="sr1"><span class="sn">' + x.title + '</span><span class="mv">' + x.moves.map(function (m) { return '<i>' + m + '</i>'; }).join('') + '</span></div><div class="x">' + x.goal + '</div></div>';
+      });
+      h += '</div>';
     });
     el.innerHTML = h;
-    var c = el.querySelector('.cur'); if (c) el.scrollTop = c.offsetTop - el.offsetTop - 6;
+    var c = el.querySelector('.setrow.on') || el.querySelector('.cur'); if (c) el.scrollTop = c.offsetTop - el.offsetTop - 6;
   }
   var toastT;
   function toast(t) { var e = $('toast'); e.textContent = t; e.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(function () { e.classList.remove('show'); }, 2600); }
@@ -1017,7 +1162,8 @@ function demoState() { var s = randomState(); return applyAlg(s, solveCross(s));
     stash.alg = a; stopAll(); spin = false;
     var mv = parseAlg(a.alg);
     state = applyAlg(solvedState(), invAlg(mv)); paint();
-    plan = makePlan([{ title: a.name, text: 'Watch the pieces move. The cube ends solved.', moves: mv, focus: null }], { custom: true });
+    var sg = { title: a.name, text: 'Watch the pieces move. The cube ends solved.', moves: mv, focus: null, alg: a.id }; sg.sets = setsFor(sg);
+    plan = makePlan([sg], { custom: true });
     refresh(); window.scrollTo({ top: 0, behavior: 'smooth' });
     if (mode === 'watch') { playing = true; setPlayIcon(); setTimeout(playLoop, 500); }
   }
@@ -1420,7 +1566,7 @@ function demoState() { var s = randomState(); return applyAlg(s, solveCross(s));
   function setMode(m) {
     mode = m; playing = false; setPlayIcon();
     $('mWatch').setAttribute('aria-pressed', m === 'watch'); $('mFollow').setAttribute('aria-pressed', m === 'follow');
-    $('bPlay').hidden = m === 'follow'; $('bNext').hidden = m === 'follow'; $('speedWrap').hidden = m === 'follow';
+    $('bPlay').hidden = m === 'follow'; $('bNext').hidden = m === 'follow'; $('bPrev').hidden = m !== 'follow'; $('speedWrap').hidden = m === 'follow';
     $('bDone').hidden = m !== 'follow';
     document.querySelector('.viewer').classList.toggle('follow', m === 'follow');
     if (m === 'follow') ensurePlan();
@@ -1450,14 +1596,16 @@ function demoState() { var s = randomState(); return applyAlg(s, solveCross(s));
 
   $('bPlay').onclick = function () { spin = false; if (busy) return; playing = !playing; setPlayIcon(); if (playing) playLoop(); };
   $('bNext').onclick = function () { spin = false; playing = false; setPlayIcon(); fwd(); };
-  $('bDone').onclick = function () { spin = false; fwd(); };
+  $('bDone').onclick = function () { spin = false; fwd(1.4); };
+  $('bPrev').onclick = function () { spin = false; preview(); };
+  $('bReplay').onclick = function () { spin = false; playing = false; setPlayIcon(); replay(); };
   $('bBack').onclick = function () { back(); };
   $('speed').value = speed;
   $('speed').oninput = function (e) { speed = +e.target.value; save(); };
   $('mWatch').onclick = function () { setMode('watch'); };
   $('mFollow').onclick = function () { setMode('follow'); };
   $('autoView').checked = autoView;
-  $('autoView').onchange = function (e) { autoView = e.target.checked; if (!autoView) cam = null; else if (plan && plan.flat[plan.idx]) aimCamera(plan.flat[plan.idx].tok); save(); };
+  $('autoView').onchange = function (e) { autoView = e.target.checked; if (!autoView) cam = null; else if (curSet()) aimCamera(curSet().moves[0]); save(); };
   $('bFlip').onclick = function () { spin = false; cam = [rx < 0 ? 26 : -26, ry]; };
   $('moves').innerHTML = ['U', "U'", 'R', "R'", 'F', "F'", 'D', "D'", 'L', "L'", 'B', "B'"].map(function (m) { return '<button data-m="' + m + '">' + m + '</button>'; }).join('');
   $('moves').onclick = function (e) { var m = e.target.dataset && e.target.dataset.m; if (m) userMove(m); };
