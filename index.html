@@ -232,6 +232,11 @@ button.setrow.on{background:#1a0b20;border-radius:6px}
 .skips{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:2px}
 .linkbtn{background:transparent;border:1px solid var(--line);color:var(--cyan);min-height:36px;padding:6px 10px;font-size:14px}
 
+button.chip{font:inherit;font-size:12px;min-height:0;line-height:1.3}
+.chip.ahead{cursor:pointer;color:var(--ink)}
+.chip.ahead:hover{border-color:var(--cyan);box-shadow:0 0 10px #35e0ff44}
+.chip.ahead b{color:var(--cyan)}
+
 </style>
 </head>
 <body>
@@ -273,6 +278,7 @@ button.setrow.on{background:#1a0b20;border-radius:6px}
 
   <section class="card" aria-label="Progress">
     <h2>Progress</h2>
+    <p class="sub">Tap a later step to jump ahead to it.</p>
     <div class="steps" id="steps"></div>
   </section>
 
@@ -1110,14 +1116,29 @@ function demoState() { var s = randomState(); return applyAlg(s, solveCross(s));
     if (stash) { $('hud').innerHTML = 'ALGORITHM<br><b>' + (plan ? plan.segs[0].title.toUpperCase() : 'DONE') + '</b>'; return; }
     $('hud').innerHTML = st === 8 ? 'STATUS <b>SOLVED</b>' : 'STEP <b>' + st + ' / 7</b><br>' + STAGES[st].name.toUpperCase() + (plan ? '<br>SET <b>' + Math.min(plan.idx + 1, plan.sets.length) + ' / ' + plan.sets.length + '</b>' : '');
   }
+  function curStage() { return stash ? stageOf(stash.state) : plan && !plan.custom && plan.stage ? plan.stage : stageOf(state); }
   function renderSteps() {
-    var st = stash ? stageOf(stash.state) : stageOf(state), h = '';
-    for (var i = 1; i <= 7; i++) {
-      var cls = i < st ? 'done' : i === st ? 'now' : '';
-      h += '<div class="chip ' + cls + '"><b>' + (i < st ? 'DONE' : i === st ? 'NOW' : 'STEP ' + i) + '</b>' + STAGES[i].short + '</div>';
+    var st = curStage(), h = '';
+    for (var i = 1; i <= 8; i++) {
+      var cls = i < st ? 'done' : i === st ? 'now' : 'ahead', lab = i === 8 ? 'Solved' : STAGES[i].short;
+      var tag = i < st || (i === 8 && st === 8) ? 'DONE' : i === st ? 'NOW' : i === 8 ? 'GOAL' : 'STEP ' + i;
+      h += '<button class="chip ' + cls + '" data-stage="' + i + '" aria-label="' + (i > st ? 'Jump ahead to ' : '') + lab + '"><b>' + tag + '</b>' + lab + '</button>';
     }
-    h += '<div class="chip ' + (st === 8 ? 'done' : '') + '"><b>' + (st === 8 ? 'DONE' : 'GOAL') + '</b>Solved</div>';
     $('steps').innerHTML = h;
+  }
+  function jumpStage(target) {
+    if (busy || stash) return;
+    var st = curStage();
+    if (target <= st) { toast(target < st ? 'That step is already done.' : 'You are on this step now.'); return; }
+    playing = false; setPlayIcon();
+    if (plan) { for (var i = plan.idx; i < plan.sets.length; i++) state = applyAlg(state, plan.sets[i].moves); }
+    plan = null; setFocus(null);
+    var guard = 0;
+    while (stageOf(state) < target && guard++ < 10) { var p = planStage(state, nm(), { short: shortC }); if (!p) break; p.segs.forEach(function (g) { state = applyAlg(state, g.moves); }); }
+    paint(); $('badge').textContent = '';
+    if (stageOf(state) < 8) ensurePlan();
+    refresh(); hud();
+    toast(target === 8 ? 'Jumped to the end. Cube solved.' : 'Jumped ahead to step ' + target + ': ' + STAGES[target].name);
   }
   function topView(s) {
     var g = [], c = function (i) { return COLORS[scheme[s[i]]]; }, r, k;
@@ -1609,6 +1630,7 @@ function demoState() { var s = randomState(); return applyAlg(s, solveCross(s));
     if (b.dataset.w !== undefined) { watchAlg(ALGS[+b.dataset.w]); return; }
     if (b.dataset.case !== undefined) watchAlg(ALGS[0], ALGS[0].cases[+b.dataset.case].k);
   };
+  $('steps').addEventListener('click', function (e) { var c = e.target.closest('button[data-stage]'); if (c) jumpStage(+c.dataset.stage); });
   $('coach').addEventListener('click', function (e) { var j = e.target.closest('button[data-set]'); if (j) { jumpTo(+j.dataset.set); return; } });
   $('moveline').addEventListener('click', function (e) { var k = e.target.closest('button[data-skip]'); if (k && plan) jumpTo(plan.sets.length); });
   $('coach').addEventListener('click', function (e) { var b = e.target.closest('button[data-case]'); if (b) watchAlg(ALGS[0], ALGS[0].cases[+b.dataset.case].k); });
@@ -1722,6 +1744,7 @@ function demoState() { var s = randomState(); return applyAlg(s, solveCross(s));
   } else state = demoState();
   buildScan(); renderAlgs(); renderTimerOpts(); paint();
   setMode(mode); refresh();
+  if (stageOf(state) < 8) { ensurePlan(); hud(); }
   if (mode === 'watch') syncMove();
 })();
 
