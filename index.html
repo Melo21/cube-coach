@@ -46,7 +46,7 @@ header{display:flex;flex-direction:column;gap:2px}
 .cubie{position:absolute;left:0;top:0;width:0;height:0;transform-style:preserve-3d}
 .face{position:absolute;backface-visibility:hidden;background:#06090f;display:grid;place-items:center}
 .stk{width:86%;height:86%;border-radius:14%;background:var(--c);box-shadow:0 0 10px var(--c),inset 0 0 8px #ffffff55;transition:opacity .25s,filter .25s}
-.stk.dim{opacity:.22;filter:saturate(.3)}
+.stk.dim{opacity:.6;filter:saturate(.75) brightness(.8)}
 .stk.hl{animation:pulse 1.1s ease-in-out infinite}
 .stk.turn{filter:brightness(1.35);box-shadow:0 0 18px var(--c),0 0 4px #fff,inset 0 0 8px #fff}
 @keyframes pulse{50%{filter:brightness(1.5);box-shadow:0 0 20px var(--c),0 0 6px #fff}}
@@ -237,6 +237,10 @@ button.chip{font:inherit;font-size:12px;min-height:0;line-height:1.3}
 .chip.ahead:hover{border-color:var(--cyan);box-shadow:0 0 10px #35e0ff44}
 .chip.ahead b{color:var(--cyan)}
 
+.stk.turn{opacity:1 !important;filter:brightness(1.2) !important}
+.mchip.next{border-color:var(--cyan);box-shadow:0 0 10px #35e0ff55}
+.hint{font-size:13px;color:var(--ink);opacity:.75}
+
 </style>
 </head>
 <body>
@@ -254,7 +258,7 @@ button.chip{font:inherit;font-size:12px;min-height:0;line-height:1.3}
       <div class="world" id="world"><div class="arrow" id="arrow"></div></div>
       <div class="hud" id="hud"></div>
       <div class="badge" id="badge"></div>
-      <div class="hint">Drag to rotate</div>
+      <div class="hint">Tap the cube for the next move &middot; drag to rotate</div>
     </div>
     <div class="moveline" id="moveline"></div>
     <div class="bar">
@@ -272,7 +276,7 @@ button.chip{font:inherit;font-size:12px;min-height:0;line-height:1.3}
       <button id="bPrev" hidden>Show me</button>
       <button class="pri done" id="bDone" hidden>I did this set &#10003;</button>
       <button id="bFlip">Flip view</button>
-      <label class="grow" id="speedWrap">Speed <input type="range" id="speed" min="0.5" max="3" step="0.1" value="1" aria-label="Speed"></label>
+      <label class="grow" id="speedWrap">Slow <input type="range" id="speed" min="0.3" max="2" step="0.1" value="1" aria-label="Speed"> Fast</label>
     </div>
   </section>
 
@@ -872,7 +876,7 @@ function demoState() { var s = randomState(); return applyAlg(s, solveCross(s));
   try { saved = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { saved = {}; }
   var state = solvedState(), scheme = DEF_SCHEME.slice();
   var mode = saved.mode || 'watch', autoView = saved.autoView !== false, shortC = !!saved.shortC, spotlight = saved.spotlight !== false;
-  var speed = saved.speed || 1, stats = saved.stats || { quiz: {}, times: {} };
+  var speed = Math.min(2, saved.speed || 1), stats = saved.stats || { quiz: {}, times: {} };
   stats.quiz = stats.quiz || {}; stats.times = stats.times || {};
   var plan = null, busy = false, playing = false, focusKeys = null, stash = null;
   var S = 54, rx = -26, ry = -38, spin = !saved.state, cam = null;
@@ -967,7 +971,7 @@ function demoState() { var s = randomState(); return applyAlg(s, solveCross(s));
       var layer = cubies.filter(function (c) { return c.pos[0] * NORM[f][0] + c.pos[1] * NORM[f][1] + c.pos[2] * NORM[f][2] === 1; });
       layer.forEach(function (c) { c.faces.forEach(function (x) { x.el.classList.add('turn'); }); });
       $('badge').textContent = tok; showArrow(tok);
-      var total = ax[1] * 90 * dir, dur = (dir === 2 ? 620 : 420) / (speed * (mul || 1)), t0 = performance.now();
+      var total = ax[1] * 90 * dir, dur = (dir === 2 ? 1000 : 700) / (speed * (mul || 1)), t0 = performance.now();
       if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) dur = 1;
       (function step(t) {
         var p = Math.min(1, (t - t0) / dur), e = p < .5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
@@ -992,6 +996,7 @@ function demoState() { var s = randomState(); return applyAlg(s, solveCross(s));
     return p;
   }
   function curSet() { return plan && plan.sets[plan.idx]; }
+  var snaps = {};
   function ensurePlan() {
     if (plan) return plan;
     if (stash) return null;
@@ -999,6 +1004,7 @@ function demoState() { var s = randomState(); return applyAlg(s, solveCross(s));
     if (!p) return null;
     plan = makePlan(p.segs, { stage: p.stage });
     if (!plan.sets.length) { plan = null; return null; }
+    if (!snaps[p.stage]) snaps[p.stage] = state;
     setFocus(p.segs[0].focus); renderCoach(); syncMove(); return plan;
   }
   function runMoves(list, mul) {
@@ -1009,7 +1015,7 @@ function demoState() { var s = randomState(); return applyAlg(s, solveCross(s));
         var t = list[i];
         if (plan) { plan.mi = t.mi; renderSet(); }
         aimCamera(t.tok);
-        turn(t.tok, mul).then(function () { i++; setTimeout(next, 90 / speed); });
+        turn(t.tok, mul).then(function () { i++; setTimeout(next, 380 / (speed * (mul || 1))); });
       })();
     });
   }
@@ -1019,42 +1025,63 @@ function demoState() { var s = randomState(); return applyAlg(s, solveCross(s));
     var cs = curSet();
     if (!cs) return Promise.resolve();
     busy = true; setFocus(plan.segs[cs.si].focus);
-    return runMoves(cs.moves.map(function (t, k) { return { tok: t, mi: k }; }), mul).then(function () {
-      busy = false; plan.idx++; plan.mi = -1; $('badge').textContent = '';
+    var from = plan.mp || 0;
+    return runMoves(cs.moves.map(function (t, k) { return { tok: t, mi: k }; }).slice(from), mul).then(function () {
+      busy = false; plan.idx++; plan.mi = -1; plan.mp = 0; $('badge').textContent = '';
       var nx = curSet();
       if (nx) { setFocus(plan.segs[nx.si].focus); updateList(); hud(); syncMove(); }
       else finishPlan();
     });
   }
+  function stepMove() {
+    if (busy) return;
+    if (!ensurePlan()) return;
+    var cs = curSet(); if (!cs) return;
+    playing = false; setPlayIcon(); spin = false;
+    var k = plan.mp || 0;
+    busy = true; setFocus(plan.segs[cs.si].focus);
+    plan.mi = k; renderSet(); aimCamera(cs.moves[k]);
+    turn(cs.moves[k]).then(function () {
+      busy = false; plan.mi = -1; plan.mp = k + 1; $('badge').textContent = '';
+      if (plan.mp >= cs.moves.length) {
+        plan.idx++; plan.mp = 0;
+        var nx = curSet();
+        if (nx) { setFocus(plan.segs[nx.si].focus); updateList(); hud(); syncMove(); } else finishPlan();
+      } else { syncMove(); }
+    });
+  }
   function back(mul) {
-    if (busy || !plan || plan.idx === 0) return Promise.resolve();
+    if (busy || !plan || (plan.idx === 0 && !plan.mp)) return Promise.resolve();
     busy = true; playing = false; setPlayIcon();
-    plan.idx--; var cs = curSet(); setFocus(plan.segs[cs.si].focus);
-    var list = cs.moves.map(function (t, k) { return { tok: invTok(t), mi: k }; }).reverse();
-    return runMoves(list, mul || 1.8).then(function () { busy = false; plan.mi = -1; $('badge').textContent = ''; updateList(); hud(); syncMove(); });
+    var n;
+    if (plan.mp) { n = plan.mp; } else { plan.idx--; n = curSet().moves.length; }
+    var cs = curSet(); setFocus(plan.segs[cs.si].focus);
+    var list = cs.moves.slice(0, n).map(function (t, k) { return { tok: invTok(t), mi: k }; }).reverse();
+    return runMoves(list, mul || 1.6).then(function () { busy = false; plan.mi = -1; plan.mp = 0; $('badge').textContent = ''; updateList(); hud(); syncMove(); });
   }
   function preview() {
     if (busy || !ensurePlan()) return;
     var cs = curSet(); if (!cs) return;
     busy = true; setFocus(plan.segs[cs.si].focus);
-    var f = cs.moves.map(function (t, k) { return { tok: t, mi: k }; });
+    var f = cs.moves.map(function (t, k) { return { tok: t, mi: k }; }).slice(plan.mp || 0);
     runMoves(f).then(function () {
       plan.mi = -1; renderSet();
       return new Promise(function (r) { setTimeout(r, 500); });
     }).then(function () {
-      return runMoves(f.slice().reverse().map(function (x) { return { tok: invTok(x.tok), mi: x.mi }; }), 2.2);
+      return runMoves(f.slice().reverse().map(function (x) { return { tok: invTok(x.tok), mi: x.mi }; }), 1.8);
     }).then(function () { busy = false; plan.mi = -1; $('badge').textContent = ''; syncMove(); });
   }
   function replay() {
-    if (busy || !plan || plan.idx === 0) return;
-    back(2.2).then(function () { setTimeout(function () { fwd(); }, 250); });
+    if (busy || !plan || (plan.idx === 0 && !plan.mp)) return;
+    back(1.8).then(function () { setTimeout(function () { fwd(); }, 250); });
   }
   function jumpTo(target) {
     if (busy || !plan) return;
     target = Math.max(0, Math.min(plan.sets.length, target));
-    if (target === plan.idx) return;
+    if (target === plan.idx && !plan.mp) return;
     playing = false; setPlayIcon();
     var i;
+    if (plan.mp) { state = applyAlg(state, invAlg(curSet().moves.slice(0, plan.mp))); plan.mp = 0; }
     if (target > plan.idx) for (i = plan.idx; i < target; i++) state = applyAlg(state, plan.sets[i].moves);
     else for (i = plan.idx - 1; i >= target; i--) state = applyAlg(state, invAlg(plan.sets[i].moves));
     var from = plan.idx; plan.idx = target; plan.mi = -1; $('badge').textContent = '';
@@ -1075,7 +1102,7 @@ function demoState() { var s = randomState(); return applyAlg(s, solveCross(s));
   function playLoop() {
     if (!playing) return;
     if (!plan && !ensurePlan()) { playing = false; setPlayIcon(); return; }
-    fwd().then(function () { if (playing && plan) setTimeout(playLoop, 900 / speed); else { playing = false; setPlayIcon(); } });
+    fwd().then(function () { if (playing && plan) setTimeout(playLoop, 1600 / speed); else { playing = false; setPlayIcon(); } });
   }
   function stopAll() { playing = false; setPlayIcon(); plan = null; setFocus(null); }
   function userMove(tok) {
@@ -1086,10 +1113,10 @@ function demoState() { var s = randomState(); return applyAlg(s, solveCross(s));
   function renderSet() {
     var el = $('moveline'), cs = curSet();
     if (!cs) return;
-    var seg = plan.segs[cs.si], tok = cs.moves[plan.mi >= 0 ? plan.mi : 0];
+    var seg = plan.segs[cs.si], tok = cs.moves[plan.mi >= 0 ? plan.mi : (plan.mp || 0)];
     showArrow(tok); if (!busy) aimCamera(tok);
     var chips = cs.moves.map(function (t, k) {
-      var c = plan.mi < 0 ? '' : k < plan.mi ? 'past' : k === plan.mi ? 'on' : '';
+      var mp = plan.mp || 0, c = plan.mi >= 0 ? (k < plan.mi ? 'past' : k === plan.mi ? 'on' : '') : (k < mp ? 'past' : k === mp ? 'next' : '');
       return '<span class="mchip ' + c + '"><b>' + t + '</b><small>' + words(t) + '</small></span>';
     }).join('');
     el.innerHTML = '<div class="setbox"><div class="n">SET ' + (plan.idx + 1) + ' OF ' + plan.sets.length + ' · ' + seg.title.toUpperCase() + '</div>' +
@@ -1129,12 +1156,21 @@ function demoState() { var s = randomState(); return applyAlg(s, solveCross(s));
   function jumpStage(target) {
     if (busy || stash) return;
     var st = curStage();
-    if (target <= st) { toast(target < st ? 'That step is already done.' : 'You are on this step now.'); return; }
+    if (target === st) { if (plan && (plan.idx || plan.mp)) jumpTo(0); toast('Back to the start of this step.'); return; }
+    if (target < st) {
+      var snap = target === 8 ? null : snaps[target];
+      if (!snap) { toast('That step was done before this cube was loaded, so there is nothing to rewatch.'); return; }
+      playing = false; setPlayIcon(); plan = null; setFocus(null);
+      state = snap; Object.keys(snaps).forEach(function (k) { if (+k > target) delete snaps[k]; });
+      paint(); ensurePlan(); refresh(); hud();
+      toast('Back to the start of step ' + target + ' so you can watch it again.');
+      return;
+    }
     playing = false; setPlayIcon();
     if (plan) { for (var i = plan.idx; i < plan.sets.length; i++) state = applyAlg(state, plan.sets[i].moves); }
     plan = null; setFocus(null);
     var guard = 0;
-    while (stageOf(state) < target && guard++ < 10) { var p = planStage(state, nm(), { short: shortC }); if (!p) break; p.segs.forEach(function (g) { state = applyAlg(state, g.moves); }); }
+    while (stageOf(state) < target && guard++ < 10) { var p = planStage(state, nm(), { short: shortC }); if (!p) break; if (!snaps[p.stage]) snaps[p.stage] = state; p.segs.forEach(function (g) { state = applyAlg(state, g.moves); }); }
     paint(); $('badge').textContent = '';
     if (stageOf(state) < 8) ensurePlan();
     refresh(); hud();
@@ -1193,7 +1229,7 @@ function demoState() { var s = randomState(); return applyAlg(s, solveCross(s));
     if (plan) h += '<p class="sub">Tap any set to jump straight to it, forward or back.</p>';
     h += '<div class="seglist" id="seglist"></div>';
     el.innerHTML = h;
-    $('cGuide').onclick = function () { if (busy) return; stopAll(); ensurePlan(); hud(); };
+    $('cGuide').onclick = function () { if (busy) return; if (plan && (plan.idx || plan.mp)) { jumpTo(0); toast('Back to the start of this step.'); return; } stopAll(); ensurePlan(); hud(); };
     $('cSpot').onchange = function (e) { spotlight = e.target.checked; paint(); save(); };
     if (st === 2) {
       var setM = function (v) { if (busy) return; shortC = v; var had = !!plan; stopAll(); if (had) ensurePlan(); renderCoach(); syncMove(); save(); };
@@ -1272,11 +1308,11 @@ function demoState() { var s = randomState(); return applyAlg(s, solveCross(s));
     var err = validate(ns);
     if (err) { msg.className = 'msg err'; msg.textContent = err + ' Compare each face with your cube.'; return; }
     if (busy) return;
-    stash = null; stopAll(); state = ns; scheme = sc; painterDirty = false; paint();
+    snaps = {}; stash = null; stopAll(); state = ns; scheme = sc; painterDirty = false; paint();
     $('whiteTop').checked = false; spin = false;
     msg.textContent = 'Cube loaded.'; refresh(); ensurePlan(); hud(); window.scrollTo({ top: 0, behavior: 'smooth' });
   }
-  function setCube(s) { if (busy) return; stash = null; stopAll(); state = s; scheme = DEF_SCHEME.slice(); painterDirty = false; paint(); $('msg').textContent = ''; refresh(); }
+  function setCube(s) { if (busy) return; snaps = {}; stash = null; stopAll(); state = s; scheme = DEF_SCHEME.slice(); painterDirty = false; paint(); $('msg').textContent = ''; refresh(); }
 
   /* ---------- photo scan ---------- */
   var SCAN = [
@@ -1560,7 +1596,7 @@ function demoState() { var s = randomState(); return applyAlg(s, solveCross(s));
     if (r.ok) {
       var ns = new Uint8Array(r.lbl), sc = r.scheme.slice();
       if (sc[0] === 0) { var fz = flipZ(ns, sc); ns = fz[0]; sc = fz[1]; }
-      stash = null; stopAll(); state = ns; scheme = sc; painterDirty = false; spin = false; paint(); refresh(); ensurePlan(); hud();
+      snaps = {}; stash = null; stopAll(); state = ns; scheme = sc; painterDirty = false; spin = false; paint(); refresh(); ensurePlan(); hud();
       var st = stageOf(state);
       toast(st === 8 ? 'Cube set. It is already solved!' : 'Cube set. You are on step ' + st + ': ' + STAGES[st].name);
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1682,7 +1718,7 @@ function demoState() { var s = randomState(); return applyAlg(s, solveCross(s));
   function setMode(m) {
     mode = m; playing = false; setPlayIcon();
     $('mWatch').setAttribute('aria-pressed', m === 'watch'); $('mFollow').setAttribute('aria-pressed', m === 'follow');
-    $('bPlay').hidden = m === 'follow'; $('bNext').hidden = m === 'follow'; $('bPrev').hidden = m !== 'follow'; $('speedWrap').hidden = m === 'follow';
+    $('bPlay').hidden = m === 'follow'; $('bNext').hidden = m === 'follow'; $('bPrev').hidden = m !== 'follow'; 
     $('bDone').hidden = m !== 'follow';
     document.querySelector('.viewer').classList.toggle('follow', m === 'follow');
     if (m === 'follow') ensurePlan();
@@ -1692,13 +1728,15 @@ function demoState() { var s = randomState(); return applyAlg(s, solveCross(s));
   /* ---------- wiring ---------- */
   build(); applyView();
   var drag = null;
-  stage.addEventListener('pointerdown', function (e) { drag = { x: e.clientX, y: e.clientY }; spin = false; cam = null; stage.setPointerCapture(e.pointerId); });
+  var tapStart = null;
+  stage.addEventListener('pointerdown', function (e) { tapStart = { x: e.clientX, y: e.clientY, t: performance.now() }; drag = { x: e.clientX, y: e.clientY }; spin = false; cam = null; stage.setPointerCapture(e.pointerId); });
   stage.addEventListener('pointermove', function (e) {
     if (!drag) return;
     ry += (e.clientX - drag.x) * 0.5; rx = Math.max(-89, Math.min(89, rx - (e.clientY - drag.y) * 0.5));
     drag = { x: e.clientX, y: e.clientY }; applyView();
   });
-  ['pointerup', 'pointercancel'].forEach(function (n) { stage.addEventListener(n, function () { drag = null; }); });
+  stage.addEventListener('pointerup', function (e) { drag = null; if (tapStart && Math.hypot(e.clientX - tapStart.x, e.clientY - tapStart.y) < 8 && performance.now() - tapStart.t < 500) stepMove(); tapStart = null; });
+  stage.addEventListener('pointercancel', function () { drag = null; tapStart = null; });
   (function loop() {
     if (spin) { ry += 0.25; applyView(); }
     else if (cam) {
