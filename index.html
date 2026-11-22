@@ -211,6 +211,20 @@ select{font:inherit;background:#0f1b30;color:var(--ink);border:1px solid var(--l
 .setrow.on{background:#1a0b20;border-radius:6px;padding:6px}
 .setrow.past{opacity:.5}
 .moveline{min-height:110px;align-items:flex-start}
+.lbl2{font-family:var(--mono);font-size:11px;color:var(--mute);letter-spacing:.06em;text-align:center}
+.explain{grid-column:1/-1;display:flex;flex-direction:column;gap:10px;border:1px solid var(--line);border-radius:10px;padding:12px;background:#09111e;margin-top:6px}
+.explain p{font-size:15px}
+.ba{display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap}
+.ba .arr{font-size:24px;color:var(--mag)}
+.cases{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.case{display:flex;flex-direction:column;align-items:center;gap:3px;border:1px solid var(--line);border-radius:8px;padding:6px 4px;background:#0a1322;text-align:center}
+.case .iso{max-width:100%;height:auto}
+.case .cl{font-size:13px;font-weight:600}
+.case .cn{font-family:var(--mono);font-size:12px;color:var(--mag)}
+.case button{min-height:34px;padding:4px 10px;font-size:13px}
+.algrow{grid-template-columns:1fr auto}
+.algrow .row{grid-row:1;grid-column:2;flex-wrap:nowrap}
+.algrow button{grid-row:auto;grid-column:auto}
 
 </style>
 </head>
@@ -816,14 +830,23 @@ function demoState() { var s = randomState(); return applyAlg(s, solveCross(s));
     { name: 'Corner positions', short: 'Place', body: 'Move the {Y} corners to their correct spots. Find a corner already sitting between its two matching centers (it may look twisted). Hold it at front right and run the algorithm. Repeat if needed.', alg: "U R U' · L' · U R' U' · L", tip: 'No corner in the right spot? Run the algorithm once from anywhere, then look again.' },
     { name: 'Final edges', short: 'Finish', body: 'Cycle the last three edges into place. Keep the finished edge at the back and run the first algorithm.', alg: "R U' · R U R U R U' · R' U' R2\nor R2 U R · U R' U' R' U' · R' U R'", tip: 'If the edges moved the wrong way, use the second algorithm instead. No edge finished? Run either once, then look again.' }
   ];
+  var TOPE = [[0, 2], [0, 1], [0, 5], [0, 4]], TOPC = [[0, 1, 2], [0, 2, 4], [0, 4, 5], [0, 5, 1]];
   var ALGS = [
-    { id: 'corner', name: 'Corner insert', step: 2, alg: "R U R' U'" },
-    { id: 'midR', name: 'Middle edge, right', step: 3, alg: "U R U' R' U' F' U F" },
-    { id: 'midL', name: 'Middle edge, left', step: 3, alg: "U' L' U L U F U' F'" },
-    { id: 'yc', name: 'Yellow cross', step: 4, alg: "F R U R' U' F'" },
-    { id: 'sune', name: 'Sune', step: 5, alg: "R U R' U R U2 R'" },
-    { id: 'corn', name: 'Corner swap', step: 6, alg: "U R U' L' U R' U' L" },
-    { id: 'ua', name: 'Edge cycle', step: 7, alg: "R U' R U R U R U' R' U' R2" }
+    { id: 'corner', name: 'Corner insert', step: 2, alg: "R U R' U'", focus: [[3, 2, 1]],
+      what: 'Moves a {W} corner from the top layer down into the bottom corner slot right below it. Hold the cube so the corner sits at the top front right, directly above where it belongs. Each pass twists the corner one step, so how many passes you need depends on which way its {W} sticker faces.',
+      cases: [{ k: 1, label: '{W} faces right', n: '1 pass' }, { k: 3, label: '{W} faces up', n: '3 passes' }, { k: 5, label: '{W} faces front', n: '5 passes' }] },
+    { id: 'midR', name: 'Middle edge, right', step: 3, alg: "U R U' R' U' F' U F", focus: [[2, 1]],
+      what: 'Moves an edge from the top layer down into the middle layer, to the right of the front center. Use it when the edge\'s front color matches the front center and its top color matches the right center.' },
+    { id: 'midL', name: 'Middle edge, left', step: 3, alg: "U' L' U L U F U' F'", focus: [[2, 4]],
+      what: 'The mirror of the right version. Moves a top edge down into the middle layer, to the left of the front center, when its top color matches the left center.' },
+    { id: 'yc', name: 'Yellow cross', step: 4, alg: "F R U R' U' F'", focus: TOPE,
+      what: 'Flips top edges so {Y} faces up, building the {Y} plus. The bottom two layers come back unchanged.' },
+    { id: 'sune', name: 'Sune', step: 5, alg: "R U R' U R U2 R'", focus: TOPC,
+      what: 'Twists top corners so {Y} faces up without moving them to new spots. The bottom two layers come back unchanged.' },
+    { id: 'corn', name: 'Corner swap', step: 6, alg: "U R U' L' U R' U' L", focus: TOPC,
+      what: 'Moves three top corners around to new spots. The corner at the front right stays where it is.' },
+    { id: 'ua', name: 'Edge cycle', step: 7, alg: "R U' R U R U R U' R' U' R2", focus: TOPE,
+      what: 'Moves three top edges around to new spots. The edge at the back stays where it is. This finishes the cube.' }
   ];
   var AXIS = { R: ['rotateX', 1], L: ['rotateX', -1], U: ['rotateY', -1], D: ['rotateY', 1], F: ['rotateZ', 1], B: ['rotateZ', -1] };
   var WORDS = { R: ['Right column up', 'Right column down'], L: ['Left column down', 'Left column up'], U: ['Top row to the left', 'Top row to the right'], D: ['Bottom row to the right', 'Bottom row to the left'], F: ['Front face clockwise', 'Front face counterclockwise'], B: ['Back face, top row moves left (seen from front)', 'Back face, top row moves right (seen from front)'] };
@@ -1109,7 +1132,7 @@ function demoState() { var s = randomState(); return applyAlg(s, solveCross(s));
     var el = $('coach');
     if (stash) {
       el.innerHTML = '<div class="banner"><h3>Watching an algorithm</h3><p class="sub">Your own cube is saved. Go back to it any time.</p><div class="row"><button class="pri" id="cRestore">Back to my cube</button><button id="cAgain">Watch again</button></div></div>';
-      $('cRestore').onclick = restoreStash; $('cAgain').onclick = function () { watchAlg(stash.alg); };
+      $('cRestore').onclick = restoreStash; $('cAgain').onclick = function () { watchAlg(stash.alg, stash.reps); };
       return;
     }
     var st = stageOf(state), pr = progress(state);
@@ -1119,6 +1142,7 @@ function demoState() { var s = randomState(); return applyAlg(s, solveCross(s));
     else h += '<p class="sub">The cross is not finished yet. ' + pr[1][0] + ' of 4 edges are in place.</p>';
     h += '<p>' + fill(s.body) + '</p>';
     if (st >= 4) h += patternBlock(st);
+    if (st === 2 && !shortC) h += '<div class="lbl2">HOW MANY PASSES? CORNER AT TOP FRONT RIGHT, ABOVE ITS SLOT</div>' + cornerCases(ALGS[0]);
     if (s.alg) h += '<div class="alg">' + s.alg.replace(/ /g, '&nbsp;').replace(/\n/g, '<br>') + '</div>';
     if (s.alg && s.alg.indexOf('·') >= 0) h += '<p class="tip">Each · splits the algorithm into sets. The coach explains the goal of each set as you go.</p>';
     h += '<p class="tip">' + (s.tip.indexOf('<b>') === 0 ? '' : '<b>Tip</b> ') + fill(s.tip).replace(/\. <b>/g, '.<br><b>') + '</p>';
@@ -1156,13 +1180,13 @@ function demoState() { var s = randomState(); return applyAlg(s, solveCross(s));
   function toast(t) { var e = $('toast'); e.textContent = t; e.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(function () { e.classList.remove('show'); }, 2600); }
 
   /* ---------- watch an algorithm ---------- */
-  function watchAlg(a) {
+  function watchAlg(a, reps) {
     if (busy) return;
     if (!stash) stash = { state: state, scheme: scheme.slice() };
-    stash.alg = a; stopAll(); spin = false;
-    var mv = parseAlg(a.alg);
-    state = applyAlg(solvedState(), invAlg(mv)); paint();
-    var sg = { title: a.name, text: 'Watch the pieces move. The cube ends solved.', moves: mv, focus: null, alg: a.id }; sg.sets = setsFor(sg);
+    stash.alg = a; stash.reps = reps; stopAll(); spin = false;
+    reps = reps || 1; var one = parseAlg(a.alg), mv = []; for (var j = 0; j < reps; j++) mv = mv.concat(one);
+    state = setupState(a, reps); paint();
+    var sg = { title: a.name + (reps > 1 ? ' x' + reps : ''), text: 'Watch the highlighted pieces. The cube ends solved.', moves: mv, focus: a.focus, alg: a.id }; sg.sets = setsFor(sg);
     plan = makePlan([sg], { custom: true });
     refresh(); window.scrollTo({ top: 0, behavior: 'smooth' });
     if (mode === 'watch') { playing = true; setPlayIcon(); setTimeout(playLoop, 500); }
@@ -1511,13 +1535,59 @@ function demoState() { var s = randomState(); return applyAlg(s, solveCross(s));
   $('scSnap').onclick = function () { captureLive(live.cur); };
   $('scBack').onclick = function () { if (live.faces.length) { live.faces.pop(); live.armed = true; live.stable = 0; renderLive(); } };
 
+  /* ---------- small 3D pictures ---------- */
+  function isoCube(st, focus, sz) {
+    sz = sz || 120;
+    var k = sz / 6.2, ox = sz / 2, oy = sz * 0.5;
+    var fk = focus ? focus.map(keyOf) : null;
+    function P(v) { return [ox + (v[0] - v[2]) * 0.866 * k, oy + (v[0] + v[2]) * 0.5 * k - v[1] * k]; }
+    var out = '';
+    [0, 2, 1].forEach(function (f) {
+      var n = NORM[f], u, v;
+      if (f === 0) { u = [1, 0, 0]; v = [0, 0, 1]; } else if (f === 2) { u = [1, 0, 0]; v = [0, 1, 0]; } else { u = [0, 0, 1]; v = [0, 1, 0]; }
+      for (var r = 0; r < 3; r++) for (var c = 0; c < 3; c++) {
+        var idx = f * 9 + r * 3 + c, pos = facePos(f, r, c), ctr = [pos[0] + n[0] * 0.5, pos[1] + n[1] * 0.5, pos[2] + n[2] * 0.5];
+        var pts = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(function (q) {
+          return P([ctr[0] + (u[0] * q[0] + v[0] * q[1]) * 0.44, ctr[1] + (u[1] * q[0] + v[1] * q[1]) * 0.44, ctr[2] + (u[2] * q[0] + v[2] * q[1]) * 0.44]);
+        }).map(function (p) { return p[0].toFixed(1) + ',' + p[1].toFixed(1); }).join(' ');
+        var on = true;
+        if (fk) { var cub = ST.filter(function (t) { return t.pos.join() === pos.join(); }).map(function (t) { return st[t.i]; }); on = fk.indexOf(keyOf(cub)) >= 0; }
+        out += '<polygon points="' + pts + '" fill="' + COLORS[scheme[st[idx]]] + '" opacity="' + (on ? 1 : 0.18) + '"' + (on && fk ? ' stroke="#fff" stroke-width="1.6"' : '') + '/>';
+      }
+    });
+    return '<svg class="iso" viewBox="0 0 ' + sz + ' ' + sz + '" width="' + sz + '" height="' + sz + '" aria-hidden="true">' + out + '</svg>';
+  }
+  function setupState(a, k) { var inv = invAlg(parseAlg(a.alg)), s0 = solvedState(); for (var j = 0; j < (k || 1); j++) s0 = applyAlg(s0, inv); return s0; }
+  function cornerCases(a, tag) {
+    return '<div class="cases">' + a.cases.map(function (c, i) {
+      return '<div class="case">' + isoCube(setupState(a, c.k), a.focus, 100) + '<div class="cl">' + fill(c.label).replace(/^./, function (m) { return m.toUpperCase(); }) + '</div><div class="cn">' + c.n + '</div><button data-case="' + i + '">Watch</button></div>';
+    }).join('') + '</div>';
+  }
+  function explainHTML(a) {
+    var sets = setsFor({ moves: parseAlg(a.alg), alg: a.id });
+    var h = '<div class="explain"><p>' + fill(a.what) + '</p>';
+    if (a.cases) h += '<div class="lbl2">WHICH WAY DOES THE ' + nm()[3].toUpperCase() + ' STICKER FACE?</div>' + cornerCases(a) +
+      '<p class="sub">The bright piece is the corner, sitting at the top front right above its slot. After the passes it is in the bottom layer with ' + nm()[3] + ' facing down.</p>';
+    else h += '<div class="ba"><div>' + isoCube(setupState(a, 1), a.focus, 116) + '<div class="lbl2">BEFORE</div></div><div class="arr">&#10132;</div><div>' + isoCube(solvedState(), a.focus, 116) + '<div class="lbl2">AFTER</div></div></div><p class="sub">The bright pieces are the ones this algorithm moves. You are looking at the top, front and right faces.</p>';
+    h += '<div class="lbl2">THE SETS</div>' + sets.map(function (x) { return '<div class="setrow"><div class="sr1"><span class="sn">' + x.title + '</span><span class="mv">' + x.moves.map(function (m) { return '<i>' + m + '</i>'; }).join('') + '</span></div><div class="x">' + fill(x.goal) + '</div></div>'; }).join('');
+    return h + '</div>';
+  }
+
   /* ---------- practice ---------- */
+  var openAlg = 0;
   function renderAlgs() {
     $('pAlg').innerHTML = ALGS.map(function (a, i) {
-      return '<div class="algrow"><div><div class="nm">' + a.name + '</div><div class="st">STEP ' + a.step + '</div></div><button data-w="' + i + '">Watch</button><code>' + a.alg + '</code></div>';
+      var grouped = setsFor({ moves: parseAlg(a.alg), alg: a.id }).map(function (x) { return x.moves.join(' '); }).join(' · ');
+      return '<div class="algrow"><div><div class="nm">' + a.name + '</div><div class="st">STEP ' + a.step + ' · ' + STAGES[a.step].name.toUpperCase() + '</div></div><div class="row"><button data-x="' + i + '" aria-expanded="' + (openAlg === i) + '">' + (openAlg === i ? 'Hide' : 'Explain') + '</button><button data-w="' + i + '">Watch</button></div><code>' + grouped + '</code>' + (openAlg === i ? explainHTML(a) : '') + '</div>';
     }).join('');
   }
-  $('pAlg').onclick = function (e) { var b = e.target.closest('button'); if (b) watchAlg(ALGS[+b.dataset.w]); };
+  $('pAlg').onclick = function (e) {
+    var b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.x !== undefined) { openAlg = openAlg === +b.dataset.x ? -1 : +b.dataset.x; renderAlgs(); return; }
+    if (b.dataset.w !== undefined) { watchAlg(ALGS[+b.dataset.w]); return; }
+    if (b.dataset.case !== undefined) watchAlg(ALGS[0], ALGS[0].cases[+b.dataset.case].k);
+  };
+  $('coach').addEventListener('click', function (e) { var b = e.target.closest('button[data-case]'); if (b) watchAlg(ALGS[0], ALGS[0].cases[+b.dataset.case].k); });
   var quizCur = null, revealed = false;
   function pickQuiz() {
     var w = ALGS.map(function (a) { var q = stats.quiz[a.id] || [0, 0]; return 1 + (q[1] - q[0]) * 2 + (q[1] === 0 ? 2 : 0); });
