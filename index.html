@@ -275,8 +275,13 @@ button.chip{font:inherit;font-size:12px;min-height:0;line-height:1.3}
       <button class="ctl" id="bNext" title="Play the next set" aria-label="Next set">&#9197;</button>
       <button id="bPrev" hidden>Show me</button>
       <button class="pri done" id="bDone" hidden>I did this set &#10003;</button>
-      <button id="bFlip">Flip view</button>
-      <label class="grow" id="speedWrap">Slow <input type="range" id="speed" min="0.3" max="2" step="0.1" value="1" aria-label="Speed"> Fast</label>
+    </div>
+    <div class="bar">
+      <span class="sub">Spin view</span>
+      <button class="ctl" id="bRotL" title="Spin the view left" aria-label="Spin view left">&#10226;</button>
+      <button class="ctl" id="bRotR" title="Spin the view right" aria-label="Spin view right">&#10227;</button>
+      <button id="bFlip">See top / bottom</button>
+      <label class="grow" id="speedWrap">Slow <input type="range" id="speed" min="0.3" max="2" step="0.1" value="0.7" aria-label="Speed"> Fast</label>
     </div>
   </section>
 
@@ -876,14 +881,16 @@ function demoState() { var s = randomState(); return applyAlg(s, solveCross(s));
   try { saved = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { saved = {}; }
   var state = solvedState(), scheme = DEF_SCHEME.slice();
   var mode = saved.mode || 'watch', autoView = saved.autoView !== false, shortC = !!saved.shortC, spotlight = saved.spotlight !== false;
-  var speed = Math.min(2, saved.speed || 1), stats = saved.stats || { quiz: {}, times: {} };
+  var speed = (!saved.speed || saved.speed === 1) ? 0.7 : Math.min(2, saved.speed), stats = saved.stats || { quiz: {}, times: {} };
   stats.quiz = stats.quiz || {}; stats.times = stats.times || {};
+  var snaps = {}; try { Object.keys(saved.snaps || {}).forEach(function (k) { snaps[k] = new Uint8Array(saved.snaps[k]); }); } catch (e) { snaps = {}; }
   var plan = null, busy = false, playing = false, focusKeys = null, stash = null;
   var S = 54, rx = -26, ry = -38, spin = !saved.state, cam = null;
   function save() {
     try {
       var st = stash ? stash.state : state, sc = stash ? stash.scheme : scheme;
-      localStorage.setItem(KEY, JSON.stringify({ state: Array.prototype.slice.call(st), scheme: sc, mode: mode, autoView: autoView, shortC: shortC, spotlight: spotlight, speed: speed, stats: stats }));
+      var sn = {}, src = stash && stash.practice ? stash.snaps : snaps; Object.keys(src || {}).forEach(function (k) { sn[k] = Array.prototype.slice.call(src[k]); });
+      localStorage.setItem(KEY, JSON.stringify({ snaps: sn, state: Array.prototype.slice.call(st), scheme: sc, mode: mode, autoView: autoView, shortC: shortC, spotlight: spotlight, speed: speed, stats: stats }));
     } catch (e) { /* storage unavailable */ }
   }
   function nm() { return scheme.map(function (c) { return CNAMES[c]; }); }
@@ -996,10 +1003,9 @@ function demoState() { var s = randomState(); return applyAlg(s, solveCross(s));
     return p;
   }
   function curSet() { return plan && plan.sets[plan.idx]; }
-  var snaps = {};
   function ensurePlan() {
     if (plan) return plan;
-    if (stash) return null;
+    if (stash && !stash.practice) return null;
     var p = planStage(state, nm(), { short: shortC });
     if (!p) return null;
     plan = makePlan(p.segs, { stage: p.stage });
@@ -1140,10 +1146,10 @@ function demoState() { var s = randomState(); return applyAlg(s, solveCross(s));
   function refresh() { hud(); renderSteps(); renderCoach(); syncPainter(); syncMove(); save(); }
   function hud() {
     var st = plan && !plan.custom && plan.stage ? plan.stage : stageOf(state);
-    if (stash) { $('hud').innerHTML = 'ALGORITHM<br><b>' + (plan ? plan.segs[0].title.toUpperCase() : 'DONE') + '</b>'; return; }
+    if (stash && !stash.practice) { $('hud').innerHTML = 'ALGORITHM<br><b>' + (plan ? plan.segs[0].title.toUpperCase() : 'DONE') + '</b>'; return; }
     $('hud').innerHTML = st === 8 ? 'STATUS <b>SOLVED</b>' : 'STEP <b>' + st + ' / 7</b><br>' + STAGES[st].name.toUpperCase() + (plan ? '<br>SET <b>' + Math.min(plan.idx + 1, plan.sets.length) + ' / ' + plan.sets.length + '</b>' : '');
   }
-  function curStage() { return stash ? stageOf(stash.state) : plan && !plan.custom && plan.stage ? plan.stage : stageOf(state); }
+  function curStage() { return stash && !stash.practice ? stageOf(stash.state) : plan && !plan.custom && plan.stage ? plan.stage : stageOf(state); }
   function renderSteps() {
     var st = curStage(), h = '';
     for (var i = 1; i <= 8; i++) {
@@ -1153,13 +1159,22 @@ function demoState() { var s = randomState(); return applyAlg(s, solveCross(s));
     }
     $('steps').innerHTML = h;
   }
+  function practiceStage(target) {
+    var s0 = randomState(), g = 0;
+    while (stageOf(s0) < target && g++ < 10) { var p = planStage(s0, nm()); p.segs.forEach(function (x) { s0 = applyAlg(s0, x.moves); }); }
+    if (!stash) stash = { state: state, scheme: scheme.slice(), practice: true, snaps: snaps };
+    snaps = {}; playing = false; setPlayIcon(); plan = null; setFocus(null);
+    state = s0; paint(); ensurePlan(); refresh(); hud();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    toast('Practice: step ' + target + ' on a sample cube. Tap the cube for each move.');
+  }
   function jumpStage(target) {
-    if (busy || stash) return;
+    if (busy || (stash && !stash.practice)) return;
     var st = curStage();
     if (target === st) { if (plan && (plan.idx || plan.mp)) jumpTo(0); toast('Back to the start of this step.'); return; }
     if (target < st) {
       var snap = target === 8 ? null : snaps[target];
-      if (!snap) { toast('That step was done before this cube was loaded, so there is nothing to rewatch.'); return; }
+      if (!snap) { practiceStage(target); return; }
       playing = false; setPlayIcon(); plan = null; setFocus(null);
       state = snap; Object.keys(snaps).forEach(function (k) { if (+k > target) delete snaps[k]; });
       paint(); ensurePlan(); refresh(); hud();
@@ -1167,7 +1182,7 @@ function demoState() { var s = randomState(); return applyAlg(s, solveCross(s));
       return;
     }
     playing = false; setPlayIcon();
-    if (plan) { for (var i = plan.idx; i < plan.sets.length; i++) state = applyAlg(state, plan.sets[i].moves); }
+    if (plan) { for (var i = plan.idx; i < plan.sets.length; i++) state = applyAlg(state, i === plan.idx ? plan.sets[i].moves.slice(plan.mp || 0) : plan.sets[i].moves); }
     plan = null; setFocus(null);
     var guard = 0;
     while (stageOf(state) < target && guard++ < 10) { var p = planStage(state, nm(), { short: shortC }); if (!p) break; if (!snaps[p.stage]) snaps[p.stage] = state; p.segs.forEach(function (g) { state = applyAlg(state, g.moves); }); }
@@ -1208,14 +1223,14 @@ function demoState() { var s = randomState(); return applyAlg(s, solveCross(s));
   }
   function renderCoach() {
     var el = $('coach');
-    if (stash) {
+    if (stash && !stash.practice) {
       el.innerHTML = '<div class="banner"><h3>Watching an algorithm</h3><p class="sub">Your own cube is saved. Go back to it any time.</p><div class="row"><button class="pri" id="cRestore">Back to my cube</button><button id="cAgain">Watch again</button></div></div>';
       $('cRestore').onclick = restoreStash; $('cAgain').onclick = function () { watchAlg(stash.alg, stash.reps); };
       return;
     }
     var st = stageOf(state), pr = progress(state);
     if (st === 8) { el.innerHTML = '<h3 class="ok">Solved</h3><p>Every face is one color. Scramble it from "My cube" or time a solve in Practice.</p>'; return; }
-    var s = STAGES[st], h = '<h2>Your next move</h2><h3>Step ' + st + ': ' + s.name + '</h3>';
+    var s = STAGES[st], h = (stash && stash.practice ? '<div class="banner"><h3>Practicing on a sample cube</h3><p class="sub">This is a sample cube set to the start of the step you picked. Your own cube is saved.</p><div class="row"><button class="pri" id="cRestore">Back to my cube</button></div></div>' : '') + '<h2>Your next move</h2><h3>Step ' + st + ': ' + s.name + '</h3>';
     if (st > 1) h += '<p class="sub">Your ' + nm()[3] + ' cross is done. ' + (pr[st] ? pr[st][0] + ' of ' + pr[st][1] + ' pieces in place for this step.' : '') + '</p>';
     else h += '<p class="sub">The cross is not finished yet. ' + pr[1][0] + ' of 4 edges are in place.</p>';
     h += '<p>' + fill(s.body) + '</p>';
@@ -1229,6 +1244,7 @@ function demoState() { var s = randomState(); return applyAlg(s, solveCross(s));
     if (plan) h += '<p class="sub">Tap any set to jump straight to it, forward or back.</p>';
     h += '<div class="seglist" id="seglist"></div>';
     el.innerHTML = h;
+    if ($('cRestore')) $('cRestore').onclick = restoreStash;
     $('cGuide').onclick = function () { if (busy) return; if (plan && (plan.idx || plan.mp)) { jumpTo(0); toast('Back to the start of this step.'); return; } stopAll(); ensurePlan(); hud(); };
     $('cSpot').onchange = function (e) { spotlight = e.target.checked; paint(); save(); };
     if (st === 2) {
@@ -1261,6 +1277,7 @@ function demoState() { var s = randomState(); return applyAlg(s, solveCross(s));
   /* ---------- watch an algorithm ---------- */
   function watchAlg(a, reps) {
     if (busy) return;
+    if (stash && stash.practice) { snaps = stash.snaps || {}; stash = { state: stash.state, scheme: stash.scheme }; }
     if (!stash) stash = { state: state, scheme: scheme.slice() };
     stash.alg = a; stash.reps = reps; stopAll(); spin = false;
     reps = reps || 1; var one = parseAlg(a.alg), mv = []; for (var j = 0; j < reps; j++) mv = mv.concat(one);
@@ -1272,7 +1289,7 @@ function demoState() { var s = randomState(); return applyAlg(s, solveCross(s));
   }
   function restoreStash() {
     if (busy || !stash) return;
-    stopAll(); state = stash.state; scheme = stash.scheme; stash = null; paint(); refresh();
+    stopAll(); state = stash.state; scheme = stash.scheme; if (stash.practice) snaps = stash.snaps || {}; stash = null; paint(); refresh(); if (stageOf(state) < 8) { ensurePlan(); hud(); }
   }
 
   /* ---------- painter ---------- */
@@ -1312,7 +1329,7 @@ function demoState() { var s = randomState(); return applyAlg(s, solveCross(s));
     $('whiteTop').checked = false; spin = false;
     msg.textContent = 'Cube loaded.'; refresh(); ensurePlan(); hud(); window.scrollTo({ top: 0, behavior: 'smooth' });
   }
-  function setCube(s) { if (busy) return; snaps = {}; stash = null; stopAll(); state = s; scheme = DEF_SCHEME.slice(); painterDirty = false; paint(); $('msg').textContent = ''; refresh(); }
+  function setCube(s) { if (busy) return; snaps = {}; stash = null;  stopAll(); state = s; scheme = DEF_SCHEME.slice(); painterDirty = false; paint(); $('msg').textContent = ''; refresh(); }
 
   /* ---------- photo scan ---------- */
   var SCAN = [
@@ -1760,6 +1777,8 @@ function demoState() { var s = randomState(); return applyAlg(s, solveCross(s));
   $('mFollow').onclick = function () { setMode('follow'); };
   $('autoView').checked = autoView;
   $('autoView').onchange = function (e) { autoView = e.target.checked; if (!autoView) cam = null; else if (curSet()) aimCamera(curSet().moves[0]); save(); };
+  $('bRotL').onclick = function () { spin = false; cam = [rx, ry + 90]; };
+  $('bRotR').onclick = function () { spin = false; cam = [rx, ry - 90]; };
   $('bFlip').onclick = function () { spin = false; cam = [rx < 0 ? 26 : -26, ry]; };
   $('moves').innerHTML = ['U', "U'", 'R', "R'", 'F', "F'", 'D', "D'", 'L', "L'", 'B', "B'"].map(function (m) { return '<button data-m="' + m + '">' + m + '</button>'; }).join('');
   $('moves').onclick = function (e) { var m = e.target.dataset && e.target.dataset.m; if (m) userMove(m); };
