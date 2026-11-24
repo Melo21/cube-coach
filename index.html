@@ -266,7 +266,7 @@ button.chip{font:inherit;font-size:12px;min-height:0;line-height:1.3}
         <button id="mWatch" aria-pressed="true">Watch</button>
         <button id="mFollow" aria-pressed="false">Follow along</button>
       </div>
-      <label class="chk"><input type="checkbox" id="autoView" checked> Auto-turn view</label>
+      <label class="chk"><input type="checkbox" id="autoView"> Auto-turn view</label>
     </div>
     <div class="bar">
       <button class="ctl" id="bBack" title="Undo the last set" aria-label="Back one set">&#9198;</button>
@@ -880,17 +880,17 @@ function demoState() { var s = randomState(); return applyAlg(s, solveCross(s));
   var KEY = 'cubecoach.v2', saved = {};
   try { saved = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { saved = {}; }
   var state = solvedState(), scheme = DEF_SCHEME.slice();
-  var mode = saved.mode || 'watch', autoView = saved.autoView !== false, shortC = !!saved.shortC, spotlight = saved.spotlight !== false;
+  var mode = saved.mode || 'watch', autoView = saved.autoView2 === true, shortC = !!saved.shortC, spotlight = saved.spotlight !== false;
   var speed = (!saved.speed || saved.speed === 1) ? 0.7 : Math.min(2, saved.speed), stats = saved.stats || { quiz: {}, times: {} };
   stats.quiz = stats.quiz || {}; stats.times = stats.times || {};
   var snaps = {}; try { Object.keys(saved.snaps || {}).forEach(function (k) { snaps[k] = new Uint8Array(saved.snaps[k]); }); } catch (e) { snaps = {}; }
   var plan = null, busy = false, playing = false, focusKeys = null, stash = null;
-  var S = 54, rx = -26, ry = -38, spin = !saved.state, cam = null;
+  var S = 54, rx = -26, ry = -38, spin = false, cam = null;
   function save() {
     try {
       var st = stash ? stash.state : state, sc = stash ? stash.scheme : scheme;
       var sn = {}, src = stash && stash.practice ? stash.snaps : snaps; Object.keys(src || {}).forEach(function (k) { sn[k] = Array.prototype.slice.call(src[k]); });
-      localStorage.setItem(KEY, JSON.stringify({ snaps: sn, state: Array.prototype.slice.call(st), scheme: sc, mode: mode, autoView: autoView, shortC: shortC, spotlight: spotlight, speed: speed, stats: stats }));
+      localStorage.setItem(KEY, JSON.stringify({ snaps: sn, state: Array.prototype.slice.call(st), scheme: sc, mode: mode, autoView2: autoView, shortC: shortC, spotlight: spotlight, speed: speed, stats: stats }));
     } catch (e) { /* storage unavailable */ }
   }
   function nm() { return scheme.map(function (c) { return CNAMES[c]; }); }
