@@ -978,7 +978,7 @@ function demoState() { var s = randomState(); return applyAlg(s, solveCross(s));
       var layer = cubies.filter(function (c) { return c.pos[0] * NORM[f][0] + c.pos[1] * NORM[f][1] + c.pos[2] * NORM[f][2] === 1; });
       layer.forEach(function (c) { c.faces.forEach(function (x) { x.el.classList.add('turn'); }); });
       $('badge').textContent = tok; showArrow(tok);
-      var total = ax[1] * 90 * dir, dur = (dir === 2 ? 1000 : 700) / (speed * (mul || 1)), t0 = performance.now();
+      var total = ax[1] * 90 * dir, dur = (dir === 2 ? 1400 : 700) / (speed * (mul || 1)), t0 = performance.now();
       if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) dur = 1;
       (function step(t) {
         var p = Math.min(1, (t - t0) / dur), e = p < .5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
@@ -1063,7 +1063,7 @@ function demoState() { var s = randomState(); return applyAlg(s, solveCross(s));
     if (plan.mp) { n = plan.mp; } else { plan.idx--; n = curSet().moves.length; }
     var cs = curSet(); setFocus(plan.segs[cs.si].focus);
     var list = cs.moves.slice(0, n).map(function (t, k) { return { tok: invTok(t), mi: k }; }).reverse();
-    return runMoves(list, mul || 1.6).then(function () { busy = false; plan.mi = -1; plan.mp = 0; $('badge').textContent = ''; updateList(); hud(); syncMove(); });
+    return runMoves(list, mul || 1).then(function () { busy = false; plan.mi = -1; plan.mp = 0; $('badge').textContent = ''; updateList(); hud(); syncMove(); });
   }
   function preview() {
     if (busy || !ensurePlan()) return;
@@ -1074,12 +1074,12 @@ function demoState() { var s = randomState(); return applyAlg(s, solveCross(s));
       plan.mi = -1; renderSet();
       return new Promise(function (r) { setTimeout(r, 500); });
     }).then(function () {
-      return runMoves(f.slice().reverse().map(function (x) { return { tok: invTok(x.tok), mi: x.mi }; }), 1.8);
+      return runMoves(f.slice().reverse().map(function (x) { return { tok: invTok(x.tok), mi: x.mi }; }), 1);
     }).then(function () { busy = false; plan.mi = -1; $('badge').textContent = ''; syncMove(); });
   }
   function replay() {
     if (busy || !plan || (plan.idx === 0 && !plan.mp)) return;
-    back(1.8).then(function () { setTimeout(function () { fwd(); }, 250); });
+    back(1).then(function () { setTimeout(function () { fwd(); }, 250); });
   }
   function jumpTo(target) {
     if (busy || !plan) return;
@@ -1757,7 +1757,7 @@ function demoState() { var s = randomState(); return applyAlg(s, solveCross(s));
   (function loop() {
     if (spin) { ry += 0.25; applyView(); }
     else if (cam) {
-      rx += (cam[0] - rx) * 0.12; ry += (cam[1] - ry) * 0.12;
+      rx += (cam[0] - rx) * 0.045; ry += (cam[1] - ry) * 0.045;
       if (Math.abs(cam[0] - rx) < 0.2 && Math.abs(cam[1] - ry) < 0.2) { rx = cam[0]; ry = cam[1]; cam = null; }
       applyView();
     }
@@ -1767,7 +1767,7 @@ function demoState() { var s = randomState(); return applyAlg(s, solveCross(s));
 
   $('bPlay').onclick = function () { spin = false; if (busy) return; playing = !playing; setPlayIcon(); if (playing) playLoop(); };
   $('bNext').onclick = function () { spin = false; playing = false; setPlayIcon(); fwd(); };
-  $('bDone').onclick = function () { spin = false; fwd(1.4); };
+  $('bDone').onclick = function () { spin = false; fwd(1); };
   $('bPrev').onclick = function () { spin = false; preview(); };
   $('bReplay').onclick = function () { spin = false; playing = false; setPlayIcon(); replay(); };
   $('bBack').onclick = function () { back(); };
